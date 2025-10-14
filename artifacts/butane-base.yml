@@ -1,0 +1,149 @@
+variant: fcos
+version: 1.6.0
+kernel_arguments:
+  should_exist:
+    - ipv6.disable=1
+passwd:
+  users:
+    - name: coreuser
+      ssh_authorized_keys:
+        - "!!SSH_AUTHORIZED_KEY!!"
+      groups:
+        - wheel
+        - sudo
+boot_device:
+  mirror:
+    devices:
+      - /dev/!!DISK_0!!
+      - /dev/!!DISK_1!!
+storage:
+  disks:
+    - device: /dev/!!DISK_0!!
+      wipe_table: true
+      partitions:
+        - label: root-1
+          size_mib: 10240
+        - label: var-1
+    - device: /dev/!!DISK_1!!
+      wipe_table: true
+      partitions:
+        - label: root-2
+          size_mib: 10240
+        - label: var-2
+  raid:
+    - name: md-var
+      level: raid1
+      devices:
+        - /dev/disk/by-partlabel/var-1
+        - /dev/disk/by-partlabel/var-2
+  filesystems:
+    - device: /dev/md/md-var
+      path: /var
+      format: xfs
+      wipe_filesystem: true
+      with_mount_unit: true
+      label: var
+  files:
+    - path: /etc/systemd/network/25-k3s.link
+      mode: 0644
+      contents:
+        inline: |
+          [Match]
+          MACAddress=!!MAC_ADDRESS!!
+          [Link]
+          Name=k3s
+    - path: /etc/NetworkManager/system-connections/k3s.!!VLAN!!.nmconnection
+      mode: 0600
+      contents:
+        inline: |
+          [connection]
+          id=k3s.!!VLAN!!
+          type=vlan
+          interface-name=k3s.!!VLAN!!
+          [ethernet]
+          mtu=1400
+          [vlan]
+          egress-priority-map=
+          flags=1
+          id=!!VLAN!!
+          ingress-priority-map=
+          parent=k3s
+          [ipv4]
+          address1=!!VLAND_IP!!/25,10.100.100.120
+          dhcp-hostname=!!HOSTNAME!!
+          dns=
+          dns-search=
+          may-fail=false
+          method=manual
+    - path: /etc/hostname
+      mode: 0644
+      contents:
+        inline: "!!HOSTNAME!!"
+    - path: /etc/zincati/config.d/51-rollout-wariness.toml
+      contents:
+        inline: |
+          [identity]
+          group = "k3s-cluster"
+          rollout_wariness = 0.7
+    - path: /etc/zincati/config.d/55-updates-strategy.toml
+      contents:
+        inline: |
+          [updates]
+          strategy = "fleet_lock"
+          [updates.fleet_lock]
+          base_url = "http://10.43.254.100/"
+    - path: /etc/yum.repos.d/rancher-k3s-common.repo
+      mode: 0644
+      contents:
+        inline: |
+          [rancher-k3s-common-stable]
+          name=Rancher K3s Common (stable)
+          baseurl=https://rpm.rancher.io/k3s/stable/common/centos/9/noarch
+          enabled=1
+          gpgcheck=1
+          repo_gpgcheck=0
+          gpgkey=https://rpm.rancher.io/public.key
+    - path: /usr/local/bin/k3s
+      overwrite: true
+      mode: 0755
+      contents:
+        source: "https://github.com/k3s-io/k3s/releases/download/v1.33.5%2Bk3s1/k3s"
+        verification:
+          hash: "sha256-ba2bc6892347d5ddf7d9a1f50b4d6fe73c6c325eb16894aa95993ac143096725"
+    - path: /etc/rancher/k3s/kubelet.config
+      mode: 0644
+      contents:
+        inline: |
+          apiVersion: kubelet.config.k8s.io/v1beta1
+          kind: KubeletConfiguration
+          shutdownGracePeriod: 60s
+          shutdownGracePeriodCriticalPods: 10s
+    - path: /etc/systemd/system/k3s.service.env
+      mode: 0644
+      contents:
+        inline: |
+          K3S_KUBECONFIG_MODE='644'
+    - path: /etc/sysctl.d/90-inotify.conf
+      contents:
+        inline: |
+          fs.inotify.max_user_instances = 2048
+    - path: /etc/ssh/sshd_config.d/90-hardening.conf
+      overwrite: true
+      mode: 0600
+      contents:
+        inline: |
+          PermitRootLogin no
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          ChallengeResponseAuthentication no
+          MaxAuthTries 3
+          AllowTcpForwarding no
+          X11Forwarding no
+          AllowAgentForwarding no
+          AllowUsers coreuser
+          Port 4449
+  links:
+    - path: /usr/local/bin/kubectl
+      overwrite: false
+      target: /usr/local/bin/k3s
+      hard: false

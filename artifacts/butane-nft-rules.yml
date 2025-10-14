@@ -1,0 +1,40 @@
+storage:
+  files:
+    - path: /etc/nftables.conf
+      mode: 0644
+      contents:
+        inline: |
+          table inet hostfirewall {
+            
+            set cluster_ips {
+              type ipv4_addr
+              flags interval
+              elements = { 10.100.100.0/25 }
+            }
+
+            # Runs very early in the kernel network stack, before any routing decision
+            # https://github.com/k3s-io/k3s/discussions/10693
+            chain prerouting {
+              type filter hook prerouting priority -140; policy accept;
+
+              # Allow established and related connections
+              iifname "k3s" ct state vmap { invalid : drop, established : accept, related : accept }
+              iifname "k3s.!!VLAN!!" ct state vmap { invalid : drop, established : accept, related : accept }
+
+              # Allow SSH
+              iifname "k3s" tcp dport 4449 ct state established,new accept
+
+              # Allow HTTPS
+              iifname "k3s" tcp dport 443 ct state established,new accept
+
+              # Allow embedded etcd, Kubernetes API Server, Kubelet metrics
+              iifname "k3s.!!VLAN!!" tcp dport { 2379, 2380, 6443, 10250, 9796, 9200 } ip saddr @cluster_ips ct state established,new accept
+
+              # Flannel Wireguard with IPv4
+              iifname "k3s.!!VLAN!!" udp dport 51820 ip saddr @cluster_ips accept
+
+              # Block everything else
+              iifname "k3s" drop
+              iifname "k3s.!!VLAN!!" drop
+            }
+          }

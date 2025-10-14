@@ -1,0 +1,113 @@
+storage:
+  files:
+    - path: /etc/audit/rules.d/custom.rules
+      mode: 0640
+      contents:
+        inline: |
+          # Clear existing rules
+          -D
+
+          # Increase buffer and set fail mode (panic on failure)
+          -b 8192
+          -f 1
+
+          # Exclude noisy audit messages
+          -a exclude,always -F msgtype=DAEMON_START
+          -a exclude,always -F msgtype=DAEMON_END
+          -a exclude,always -F msgtype=USER_ACCT
+
+          # Auditd configuration & logs
+          -w /var/log/audit/ -p wa -k audit-logs
+          -w /etc/audit/ -p wa -k audit-config
+
+          # Identity and account tracking
+          -w /etc/passwd -p wa -k identity
+          -w /etc/group -p wa -k identity
+          -w /etc/shadow -p wa -k identity
+          -w /etc/gshadow -p wa -k identity
+          -w /etc/security/opasswd -p wa -k identity
+
+          # Authentication and sudo access
+          -w /etc/sudoers -p wa -k privileged
+          -w /etc/sudoers.d/ -p wa -k privileged
+          -w /etc/pam.d/ -p wa -k pam
+
+          # SSH monitoring
+          -w /etc/ssh/sshd_config -p wa -k sshd
+          -w /etc/ssh/ -p wa -k ssh-files
+
+          # systemd unit file changes
+          -w /etc/systemd/system/ -p wa -k systemd
+          -w /run/systemd/system/ -p wa -k systemd
+
+          # Time change monitoring
+          -w /etc/localtime -p wa -k time-change
+          -a always,exit -F arch=b64 -S adjtimex -S settimeofday -S clock_settime -k time-change
+          -a always,exit -F arch=b32 -S adjtimex -S settimeofday -S clock_settime -k time-change
+
+          # Kernel module load/unload
+          -a always,exit -F arch=b64 -S init_module -S finit_module -k modules
+          -a always,exit -F arch=b32 -S init_module -S finit_module -k modules
+
+          # Fedora CoreOS rpm-ostree system
+          -w /etc/ostree/ -p wa -k ostree
+          -w /sysroot/ostree/ -p wa -k ostree
+          -w /usr/lib/ostree-boot/ -p wa -k ostree
+          -w /boot/loader/ -p wa -k boot-config
+          -w /etc/systemd/network/ -p wa -k networkd-config
+          -w /etc/NetworkManager/ -p wa -k networkmanager-config
+
+          # Traditional RPM DB (optional - may cause noise on FCOS)
+          # -w /var/lib/rpm/ -p wa -k rpmdb
+
+          # Mounts and filesystem changes
+          -w /etc/fstab -p wa -k mounts
+          -a always,exit -F arch=b64 -S mount -S umount2 -k mounts
+          -a always,exit -F arch=b32 -S mount -S umount2 -k mounts
+
+          # File deletion monitoring
+          -a always,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S rmdir -k file_delete
+          -a always,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -S rmdir -k file_delete
+
+          # Exec monitoring for key binaries
+          -a always,exit -F arch=b64 -S execve -F exe=/usr/local/bin/k3s -k exec
+          -a always,exit -F arch=b64 -S execve -F exe=/usr/bin/containerd -k exec
+          -a always,exit -F arch=b64 -S execve -F exe=/usr/sbin/containerd -k exec
+          -a always,exit -F arch=b64 -S execve -F exe=/usr/bin/runc -k exec
+          -a always,exit -F arch=b64 -S execve -F exe=/usr/sbin/runc -k exec
+          -a always,exit -F arch=b64 -S execve -F exe=/usr/bin/podman -k exec
+          -a always,exit -F arch=b64 -S execve -F exe=/usr/sbin/podman -k exec
+          -a always,exit -F arch=b64 -S execve -F exe=/usr/bin/docker -k exec
+          -a always,exit -F arch=b64 -S execve -F exe=/usr/sbin/docker -k exec
+          -a always,exit -F arch=b64 -S execve -F exe=/usr/bin/rpm-ostree -k exec
+          -a always,exit -F arch=b64 -S execve -F exe=/usr/sbin/rpm-ostree -k exec
+
+          # Limited to human users (UID < 1000)
+          -a always,exit -F arch=b64 -S execve -F auid>=0 -F auid<1000 -k host-admin-exec
+
+          # Privilege-related syscall monitoring
+          -a always,exit -F arch=b64 -S setuid -S setgid -S setresuid -S setresgid -F auid>=0 -F auid<1000 -k privileges
+          -a always,exit -F arch=b32 -S setuid -S setgid -S setresuid -S setresgid -F auid>=0 -F auid<1000 -k privileges
+          -a always,exit -F arch=b64 -S capset -F auid>=0 -F auid<1000 -k capabilities
+          -a always,exit -F arch=b32 -S capset -F auid>=0 -F auid<1000 -k capabilities
+
+          # SELinux configuration monitoring
+          -w /etc/selinux/ -p wa -k selinux
+
+          # Network configuration monitoring
+          -w /etc/hosts -p wa -k network-config
+          -w /etc/hostname -p wa -k network-config
+          -w /etc/resolv.conf -p wa -k network-config
+          -w /etc/nftables/ -p wa -k network-config
+          -w /etc/sysconfig/ -p wa -k network-config
+
+          # Container runtime and K3s config
+          -w /run/containerd/ -p wa -k container-runtime
+          -w /etc/rancher/k3s/ -p wa -k k3s-config
+          -w /var/lib/containerd/ -p wa -k container-data
+          -w /var/lib/kubelet/ -p wa -k kubelet-data
+          -w /etc/containerd/ -p wa -k containerd-config
+          -w /etc/cni/ -p wa -k cni-config
+
+          # Login and secure logs (optional)
+          -w /var/log/secure -p wa -k logins

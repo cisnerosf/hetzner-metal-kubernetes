@@ -1,0 +1,153 @@
+systemd:
+  units:
+    - name: sshd.socket
+      dropins:
+      - name: 10-sshd-port.conf
+        contents: |
+          [Socket]
+          ListenStream=
+          ListenStream=4449
+    - name: "k3s.service"
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Run K3s
+        Wants=network-online.target rpm-ostree-install-packages.service
+        After=network-online.target rpm-ostree-install-packages.service
+        Requires=host-firewall.service
+
+        [Service]
+        Type=notify
+        EnvironmentFile=-/etc/default/%N
+        EnvironmentFile=-/etc/sysconfig/%N
+        EnvironmentFile=-/etc/systemd/system/%N.env
+        KillMode=process
+        Delegate=yes
+        LimitNOFILE=1048576
+        LimitNPROC=infinity
+        LimitCORE=infinity
+        TasksMax=infinity
+        TimeoutStartSec=0
+        Restart=always
+        RestartSec=5s
+        ExecStartPre=-/sbin/modprobe br_netfilter
+        ExecStartPre=-/sbin/modprobe overlay
+        ExecStart=/usr/local/bin/k3s !!K3S_COMMAND!! \
+          --kubelet-arg="config=/etc/rancher/k3s/kubelet.config" \
+          --node-name="!!HOSTNAME!!" --node-ip="!!VLAND_IP!!" --flannel-iface="k3s.!!VLAN!!" \
+          --token="!!K3S_TOKEN!!" \
+          !!K3S_ARGS!!
+
+        [Install]
+        WantedBy=multi-user.target
+    - name: "k3s-cleanup-shutdown-pods.service"
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Cleanup pods terminated by node shutdown
+        Requires=k3s.service
+
+        [Service]
+        Type=oneshot
+        Environment=KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+        ExecStart=/usr/local/bin/kubectl delete pods --field-selector status.phase=Failed -A --ignore-not-found=true
+        ExecStart=/usr/local/bin/kubectl delete pods --field-selector status.phase=Succeeded -A --ignore-not-found=true
+        Restart=on-failure
+        RestartSec=5s
+
+        [Install]
+        WantedBy=multi-user.target
+    - name: rpm-ostree-install-packages.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Install packages
+        Wants=network-online.target
+        After=network-online.target
+        Before=zincati.service
+        ConditionPathExists=!/var/lib/%N.stamp
+
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        ExecStart=/usr/sbin/rpm-ostree install \
+          --apply-live \
+          --allow-inactive \
+          --assumeyes \
+          k3s-selinux policycoreutils-python-utils
+        ExecStartPost=/usr/sbin/touch /var/lib/%N.stamp
+        Restart=on-failure
+        RestartSec=5s
+
+        [Install]
+        WantedBy=multi-user.target
+    - name: custom-selinux-rules.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Configure custom SELinux rules
+        Requires=rpm-ostree-install-packages.service
+        Before=sshd.service
+        ConditionPathExists=!/var/lib/%N.stamp
+
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        ExecStart=/usr/sbin/semanage port -a -t ssh_port_t -p tcp 4449
+        ExecStartPost=/usr/sbin/touch /var/lib/%N.stamp
+        Restart=on-failure
+        RestartSec=5s
+
+        [Install]
+        WantedBy=multi-user.target
+    - name: "k3s-custom-manifests.service"
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Custom K3S manifests
+        After=network-online.target
+        ConditionPathExists=!/var/lib/%N.stamp
+
+        [Service]
+        Type=oneshot
+        Environment=KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+        ExecStart=/usr/local/bin/kubectl apply -f /var/tmp_manifests
+        ExecStart=rm -rf /var/tmp_manifests
+        Restart=on-failure
+        RestartSec=5s
+        ExecStartPost=/usr/sbin/touch /var/lib/%N.stamp
+
+        [Install]
+        WantedBy=multi-user.target
+    - name: "host-firewall.service"
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Host firewall rules
+        Wants=network-pre.target
+        After=network-pre.target
+
+        [Service]
+        Type=oneshot
+        ExecStart=/usr/sbin/nft -f /etc/nftables.conf
+        Restart=on-failure
+        RestartSec=5s
+        RemainAfterExit=yes
+
+        [Install]
+        WantedBy=multi-user.target
+    - name: "configure-ntp.service"
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Configure NTP server
+        After=local-fs.target
+        Before=chronyd.service
+
+        [Service]
+        Type=oneshot
+        ExecStart=sed -i 's/pool 2.fedora.pool.ntp.org iburst/server time.cloudflare.com iburst/g' /etc/chrony.conf
+        RemainAfterExit=yes
+
+        [Install]
+        WantedBy=multi-user.target

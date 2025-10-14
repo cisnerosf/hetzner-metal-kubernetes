@@ -1,0 +1,346 @@
+---
+- name: Playbook for configuring standalone K3S servers on Hetzner bare metal
+  hosts: hetzner_k3s_metal
+  serial: 5
+  become: yes
+  gather_facts: true
+  vars:
+    butane: /tmp/butane.yml
+    butane_temp_dir: /tmp/butane_fragments
+    ignition: /tmp/install.ign
+
+
+  pre_tasks:
+    - name: Fetch Cloudflare Origin CA certificate
+      shell: |
+        curl -s -f --connect-timeout 10 --max-time 30 \
+          "https://developers.cloudflare.com/ssl/static/authenticated_origin_pull_ca.pem"
+      register: cf_origin_ca_response
+      run_once: true
+      failed_when: cf_origin_ca_response.rc != 0
+
+    - name: Set cf_origin_ca variable
+      set_fact:
+        cf_origin_ca: "{{ cf_origin_ca_response.stdout }}"
+      run_once: true
+
+    - name: Fetch Cloudflare IP ranges
+      shell: |
+        curl -s -f --connect-timeout 10 --max-time 30 \
+          "https://www.cloudflare.com/ips-v4/"
+      register: cf_ips_response
+      run_once: true
+      failed_when: cf_ips_response.rc != 0
+
+    - name: Set cf_ips variable
+      set_fact:
+        cf_ips: "{{ cf_ips_response.stdout.strip().split() | map('regex_replace', '^(.*)$', '\"\\1\"') | join(', ') }}"
+      run_once: true
+
+    - name: Validate Cloudflare origin certificate and key
+      shell: |
+        # Create temporary files
+        CERT_FILE=$(mktemp)
+        KEY_FILE=$(mktemp)
+        
+        # Write certificate and key to temp files
+        cat > "$CERT_FILE" << 'EOF'
+        {{ cf_origin_cert }}
+        EOF
+        cat > "$KEY_FILE" << 'EOF'
+        {{ cf_origin_cert_key }}
+        EOF
+        
+        # Validate certificate and key match
+        CERT_MODULUS=$(openssl x509 -noout -modulus -in "$CERT_FILE")
+        KEY_MODULUS=$(openssl rsa -noout -modulus -in "$KEY_FILE")
+        if [ "$CERT_MODULUS" != "$KEY_MODULUS" ]; then
+          echo "Certificate and private key do not match"
+          exit 1
+        fi
+      register: cf_cert_validation
+      failed_when: cf_cert_validation.rc != 0
+      no_log: true
+      run_once: true
+
+    - name: Check ssh_authorized_key
+      fail:
+        msg: "ssh_authorized_key is invalid"
+      when: (ssh_authorized_key | length) <= 60
+      no_log: true
+      run_once: true
+
+    - name: Check k3s_token
+      fail:
+        msg: "k3s_token is invalid"
+      when: (k3s_token | length) <= 50
+      no_log: true
+      run_once: true
+
+    - name: Check first_master matches a host
+      fail:
+        msg: "first_master is invalid"
+      when: ( groups['hetzner_k3s_metal'] | select('equalto', first_master) | list | length) != 1
+      run_once: true
+
+    - name: Check first_master is master
+      fail:
+        msg: "first_master is invalid"
+      when: hostvars[(groups['hetzner_k3s_metal'] | select('equalto', first_master) | list | first)].setup != 'master'
+      run_once: true
+
+    - name: Check vlan_ip is set
+      fail:
+        msg: "vlan_ip is not set for host {{ inventory_hostname }}"
+      when: vlan_ip is not defined or vlan_ip == ""
+
+    - name: Check for duplicate vlan_ip values across all hosts
+      fail:
+        msg: "Duplicate vlan_ip found: {{ duplicate_ips | join(', ') }}"
+      vars:
+        all_vlan_ips: "{{ groups['hetzner_k3s_metal'] | map('extract', hostvars, 'vlan_ip') | list }}"
+        unique_ips: "{{ all_vlan_ips | unique | list }}"
+        duplicate_ips: "{{ all_vlan_ips | difference(unique_ips) | unique | list }}"
+      when: duplicate_ips | length > 0
+      run_once: true
+
+
+  tasks:
+    - name: Preflight facts and variables
+      block:
+        - name: Get MAC address of eth0
+          shell: cat /sys/class/net/eth0/address
+          register: k3s_mac_address
+          changed_when: false
+          tags: [preflight]
+
+        - name: Set fact for MAC address
+          set_fact:
+            k3s_mac_address: "{{ k3s_mac_address.stdout }}"
+          tags: [preflight]
+
+        - name: Get list of NVMe device names
+          ansible.builtin.set_fact:
+            nvme_devices: >-
+              {{ ansible_devices
+                | dict2items
+                | selectattr('key', 'search', '^nvme')
+                | map(attribute='key')
+                | list }}
+          tags: [preflight]
+
+        - name: Get first master IP
+          ansible.builtin.set_fact:
+            first_master_address: >-
+              {{ hostvars[ (groups['hetzner_k3s_metal']
+                  | select('equalto', first_master)
+                  | list)[0] ].vlan_ip | trim }}
+          tags: [preflight]
+
+    - name: Wipe any existing storage/RAID metadata
+      block:
+        - name: Stop all RAIDs
+          ansible.builtin.command: mdadm --stop --scan
+          ignore_errors: false
+          tags: [storage]
+
+        - name: Zero old superblocks all NVMe devices
+          ansible.builtin.command: mdadm --zero-superblock /dev/{{ item }}
+          loop: "{{ nvme_devices }}"
+          ignore_errors: true
+          tags: [storage]
+
+        - name: Delete partitions from all NVMe devices
+          ansible.builtin.command: dd if=/dev/zero of=/dev/{{ item }} bs=512 count=1
+          loop: "{{ nvme_devices }}"
+          ignore_errors: false
+          tags: [storage]
+
+    - name: Install required tools (Butane, Rust, coreos-installer)
+      block:
+        - name: Download Butane
+          get_url:
+            url: "https://github.com/coreos/butane/releases/download/v0.25.1/butane-x86_64-unknown-linux-gnu"
+            dest: /usr/local/bin/butane
+            mode: '0755'
+            checksum: "sha256:c9bf44bed655215384fca24c3ebf2b547965d9c522cf959e735201c5f97ea467"
+          tags: [tools, butane]
+
+        - name: Check if cargo is installed
+          shell: command -v cargo
+          register: cargo_exists
+          ignore_errors: yes
+          changed_when: false
+          tags: [tools, rust]
+
+        - name: Download Installer
+          when: cargo_exists is failed
+          get_url:
+            url: https://sh.rustup.rs
+            dest: /tmp/sh.rustup.rs
+            mode: '0755'
+            force: 'yes'
+          tags: [tools, rust]
+
+        - name: Install Rust/Cargo
+          when: cargo_exists is failed
+          shell: /tmp/sh.rustup.rs -y
+          tags: [tools, rust]
+
+        - name: Remove Dell repository file
+          file:
+            path: /etc/apt/sources.list.d/linux.dell.com.sources.list
+            state: absent
+          ignore_errors: yes
+          tags: [tools, apt]
+
+        - name: Update apt cache
+          apt:
+            update_cache: yes
+            cache_valid_time: 3600
+          tags: [tools, apt]
+
+        - name: Install packages
+          apt:
+            name:
+              - pkg-config
+              - librust-curl+openssl-sys-dev
+              - libzstd-dev
+              - openssl
+              - jq
+              - python3-ruamel.yaml
+            state: present
+            install_recommends: no
+          tags: [tools, apt]
+
+        - name: Install coreos-installer
+          shell: cargo install --root /usr/local coreos-installer
+          args:
+            creates: /usr/local/bin/coreos-installer
+          tags: [tools, coreos]
+
+    - name: Prepare Butane config and compile Ignition
+      block:
+        - name: Remove all files from butane fragments directory
+          ansible.builtin.shell: |-
+            mkdir -p {{ butane_temp_dir }}
+            rm -rf {{ butane_temp_dir }}/*
+          tags: [butane]
+
+        - name: Copy butane fragment files
+          copy:
+            src: "{{ playbook_dir }}/../artifacts/"
+            dest: "{{ butane_temp_dir }}/"
+            force: yes
+          tags: [butane]
+
+        - name: Merge butane fragments
+          ansible.builtin.command:
+            cmd: /usr/bin/python3 -
+          args:
+            stdin: |
+              from pathlib import Path
+              from ruamel.yaml import YAML
+
+              yaml = YAML()
+              merged_data = {}
+
+              def deep_merge(dict1, dict2):
+                for key, value in dict2.items():
+                  if key in dict1 and isinstance(value, dict) and isinstance(dict1[key], dict):
+                    deep_merge(dict1[key], value)
+                  elif key in dict1 and isinstance(value, list) and isinstance(dict1[key], list):
+                    dict1[key].extend(value)
+                  else:
+                    dict1[key] = value
+
+              for yaml_file in sorted(Path("{{ butane_temp_dir }}").glob("*.yml")):
+                with open(yaml_file, 'r') as f:
+                  deep_merge(merged_data, yaml.load(f))
+
+              with open("{{ butane }}", 'w') as f:
+                yaml.dump(merged_data, f)
+          tags: [butane]
+
+        - name: Replace placeholders in {{ butane }}
+          no_log: true
+          ansible.builtin.replace:
+            path: "{{ butane }}"
+            regexp: "{{ item.regexp }}"
+            replace: "{{ item.replace }}"
+            backup: no
+          loop:
+            - regexp: '!!HOSTNAME!!'
+              replace: "{{ inventory_hostname }}"
+            - regexp: '!!DISK_0!!'
+              replace: "{{ nvme_devices[0] }}"
+            - regexp: '!!DISK_1!!'
+              replace: "{{ nvme_devices[1] }}"
+            - regexp: '!!SSH_AUTHORIZED_KEY!!'
+              replace: "{{ ssh_authorized_key }}"
+            - regexp: '!!CF_ORIGIN_CERT_KEY!!'
+              replace: "{{ cf_origin_cert_key | b64encode }}"
+            - regexp: '!!CF_ORIGIN_CERT!!'
+              replace: "{{ cf_origin_cert | b64encode }}"
+            - regexp: '!!CF_ORIGIN_CA!!'
+              replace: "{{ cf_origin_ca | b64encode }}"
+            - regexp: '!!CF_IP_RANGES!!'
+              replace: "{{ cf_ips }}"
+            - regexp: '!!K3S_COMMAND!!'
+              replace: >-
+                {%- if ('master' == setup) and (inventory_hostname == first_master) -%}server --cluster-init
+                {%- elif 'master' == setup -%}server --server https://{{ first_master_address }}:6443
+                {%- else -%}agent --server https://{{ first_master_address }}:6443
+                {%- endif -%}
+            - regexp: '!!K3S_ARGS!!'
+              replace: >-
+                {%- if 'master' == setup -%}--node-label setup={{ setup }}
+                --node-label hetzner-ip="{{ ansible_host }}"
+                --node-label ansible-host={{ inventory_hostname }}
+                --secrets-encryption
+                --write-kubeconfig-mode="0644"
+                --flannel-backend=wireguard-native
+                --kube-apiserver-arg="audit-policy-file=/etc/k3s-audit.yml"
+                --kube-apiserver-arg="audit-log-path=/var/log/k3s/audit.log"
+                --kube-apiserver-arg="audit-log-maxage=30"
+                --kube-apiserver-arg="audit-log-maxsize=100"
+                --kube-apiserver-arg="audit-log-maxbackup=10"
+                --disable=traefik --disable=servicelb
+                {%- else -%}--node-label setup={{ setup }}
+                --node-label hetzner-ip="{{ ansible_host }}"
+                --node-label ansible-host={{ inventory_hostname }}
+                {%- endif -%}
+            - regexp: '!!K3S_TOKEN!!'
+              replace: "{{ k3s_token }}"
+            - regexp: '!!MAC_ADDRESS!!'
+              replace: "{{ k3s_mac_address }}"
+            - regexp: '!!VLAN!!'
+              replace: "{{ vlan }}"
+            - regexp: '!!VLAND_IP!!'
+              replace: "{{ vlan_ip }}"
+          tags: [butane]
+
+        - name: Compile butane.yml file
+          ansible.builtin.command: butane {{ butane }} -o {{ ignition }}
+          ignore_errors: false
+          tags: [butane]
+
+        - name: Remove K3S Cloudflare configuration
+          shell: |
+            jq -c '.storage.files = [.storage.files[] | select(.path != "/var/tmp_manifests/cf.yml")]' {{ ignition }} > {{ ignition }}_new
+            mv {{ ignition }}_new {{ ignition }}
+          when: "inventory_hostname != first_master"
+          tags: [butane]
+
+    - name: Install Fedora CoreOS and reboot
+      block:
+        - name: Install Fedora CoreOS
+          ansible.builtin.command: coreos-installer install -i {{ ignition }} -s stable /dev/{{ nvme_devices[0] }}
+          ignore_errors: false
+          tags: [install]
+
+        - name: Reboot now
+          shell: shutdown -r now
+          async: 1
+          poll: 0
+          tags: [install]

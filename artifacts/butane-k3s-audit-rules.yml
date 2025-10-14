@@ -1,0 +1,134 @@
+storage:
+  directories:
+    - path: /var/log/k3s
+      overwrite: true
+  files:
+    - path: /etc/k3s-audit.yml
+      mode: 0644
+      contents:
+        inline: |
+          apiVersion: audit.k8s.io/v1
+          kind: Policy
+          rules:
+          # Drop noisy but harmless system operations
+          - level: None
+            resources:
+            - group: ""
+              resources: ["events"]
+            - group: "coordination.k8s.io"
+              resources: ["leases"]
+            - group: "metrics.k8s.io"
+              resources: ["*"]
+
+          # Exclude health checks and metrics scraping
+          - level: None
+            users: 
+            - "system:kube-controller-manager"
+            - "system:apiserver"
+            - "system:kube-scheduler"
+            - "system:kube-proxy"
+            - "system:serviceaccount:kube-system:metrics-server"
+            - "system:serviceaccount:kube-system:prometheus"
+            verbs: ["get", "watch", "list"]
+            resources:
+            - group: ""
+              resources: ["secrets", "configmaps", "serviceaccounts/token", "endpoints", "services"]
+
+          # Exclude node operations for system components
+          - level: None
+            userGroups: ["system:nodes", "system:bootstrappers"]
+            verbs: ["get", "watch", "list"]
+            resources:
+            - group: ""
+              resources: ["secrets", "configmaps", "serviceaccounts/token", "nodes"]
+
+          # Exclude noisy leader election operations
+          - level: None
+            namespaces: ["kube-system", "kube-public"]
+            resources:
+            - group: "coordination.k8s.io"
+              resources: ["leases"]
+            - group: ""
+              resources: ["configmaps"]
+            verbs: ["get", "update", "patch"]
+
+          # Log only metadata for secrets and configmaps (not full content)
+          - level: Metadata
+            resources:
+            - group: ""
+              resources: ["configmaps", "secrets", "serviceaccounts/token"]
+            omitStages:
+              - "RequestReceived"
+
+          # Log pod executions (kubectl exec, attach, port-forward)
+          - level: RequestResponse
+            resources:
+              - group: ""
+                resources: ["pods/exec", "pods/attach", "pods/portforward"]
+
+          # Log any unauthorized calls
+          - level: RequestResponse
+            responseCodes:
+            - 401
+            - 403
+            - 422
+            - 429
+            omitStages:
+            - RequestReceived
+
+          # Exclude read-only operations for most resources
+          - level: None
+            verbs: ["get", "watch", "list"]
+            resources:
+            - group: ""
+              resources: ["nodes", "persistentvolumes", "persistentvolumeclaims"]
+            - group: "apps"
+              resources: ["*"]
+            - group: "extensions"
+              resources: ["*"]
+
+          # Log only metadata for read operations on critical resources
+          - level: Metadata
+            verbs: ["get", "watch", "list"]
+            resources:
+            - group: ""
+              resources: ["pods", "services", "deployments", "replicasets"]
+            omitStages:
+            - RequestReceived
+
+          # Full logging for write operations (create, delete, update, patch)
+          - level: RequestResponse
+            verbs: ["create", "delete", "update", "patch", "deletecollection"]
+            resources:
+                - group: ""
+                - group: "admissionregistration.k8s.io"
+                - group: "apiextensions.k8s.io"
+                - group: "apiregistration.k8s.io"
+                - group: "apps"
+                - group: "authentication.k8s.io"
+                - group: "authorization.k8s.io"
+                - group: "autoscaling"
+                - group: "batch"
+                - group: "certificates.k8s.io"
+                - group: "extensions"
+                - group: "networking.k8s.io"
+                - group: "policy"
+                - group: "rbac.authorization.k8s.io"
+                - group: "scheduling.k8s.io"
+                - group: "settings.k8s.io"
+                - group: "storage.k8s.io"
+            omitStages:
+                - "RequestReceived"
+
+          # Log RBAC changes with full detail
+          - level: RequestResponse
+            resources:
+            - group: "rbac.authorization.k8s.io"
+            verbs: ["create", "delete", "update", "patch"]
+            omitStages:
+            - RequestReceived
+
+          # Default: log metadata for everything else
+          - level: Metadata
+            omitStages:
+            - RequestReceived

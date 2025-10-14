@@ -1,0 +1,3 @@
+artifacts/hetzner-firewall-single-server-setup.png
+.gitignore
+ansible.cfg

@@ -1,0 +1,269 @@
+storage:
+  directories:
+    - path: /var/tmp_manifests
+      overwrite: true
+    - path: /var/lib/rancher/k3s/server/manifests
+      overwrite: true
+  files:
+    - path: /var/tmp_manifests/dummmy.yml
+      mode: 0644
+      contents:
+        inline: |
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: dummy
+          data:
+            msg: Hello world
+    - path: /var/tmp_manifests/cf.yml
+      mode: 0644
+      contents:
+        inline: |
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: traefik-tls-secret
+            namespace: kube-system
+          type: kubernetes.io/tls
+          data:
+            tls.crt: !!CF_ORIGIN_CERT!!
+            tls.key: !!CF_ORIGIN_CERT_KEY!!
+          ---
+          apiVersion: traefik.io/v1alpha1
+          kind: TLSStore
+          metadata:
+            name: default
+            namespace: kube-system
+          spec:
+            defaultCertificate:
+              secretName: traefik-tls-secret
+          ---
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: cloudflare-ca
+            namespace: kube-system
+          type: Opaque
+          data:
+            ca.crt: !!CF_ORIGIN_CA!!
+          ---
+          apiVersion: traefik.io/v1alpha1
+          kind: TLSOption
+          metadata:
+            name: default
+            namespace: kube-system
+          spec:
+            clientAuth:
+              clientAuthType: RequireAndVerifyClientCert
+              secretNames:
+                - cloudflare-ca
+            minVersion: VersionTLS13
+    - path: /var/lib/rancher/k3s/server/manifests/hetzner-traefik.yml
+      mode: 0644
+      contents:
+        inline: |
+          ---
+          apiVersion: helm.cattle.io/v1
+          kind: HelmChart
+          metadata:
+            name: traefik-crd
+            namespace: kube-system
+          spec:
+            chart: https://%{KUBERNETES_API}%/static/charts/traefik-crd-34.2.1+up34.2.0.tgz
+          ---
+          apiVersion: helm.cattle.io/v1
+          kind: HelmChart
+          metadata:
+            name: traefik
+            namespace: kube-system
+          spec:
+            chart: https://%{KUBERNETES_API}%/static/charts/traefik-34.2.1+up34.2.0.tgz
+            set:
+              global.systemDefaultRegistry: ""
+            valuesContent: |-
+              logs:
+                access:
+                  enabled: true
+                  format: json
+              hostNetwork: true
+              updateStrategy:
+                rollingUpdate:
+                  maxUnavailable: 2
+                  maxSurge: 0
+              deployment:
+                kind: DaemonSet
+                podAnnotations:
+                  prometheus.io/port: "9200"
+                  prometheus.io/scrape: "true"
+              providers:
+                kubernetesIngress:
+                  publishedService:
+                    enabled: true
+              priorityClassName: "system-cluster-critical"
+              image:
+                repository: "rancher/mirrored-library-traefik"
+                tag: "3.3.6"
+              tolerations:
+              - key: "CriticalAddonsOnly"
+                operator: "Exists"
+              - key: "node-role.kubernetes.io/control-plane"
+                operator: "Exists"
+                effect: "NoSchedule"
+              - key: "node-role.kubernetes.io/master"
+                operator: "Exists"
+                effect: "NoSchedule"
+              ports:
+                websecure:
+                  port: 443
+                  forwardedHeaders:
+                    trustedIPs: [!!CF_IP_RANGES!!]
+                web:
+                  port: 80
+                  forwardedHeaders:
+                    trustedIPs: [!!CF_IP_RANGES!!]
+                metrics:
+                  port: 9200
+              securityContext:
+                capabilities:
+                  add: ["NET_BIND_SERVICE"]
+              podSecurityContext:
+                runAsGroup: 0
+                runAsNonRoot: false
+                runAsUser: 0
+    - path: /var/lib/rancher/k3s/server/manifests/fleetlock.yml
+      mode: 0644
+      contents:
+        inline: |
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: fleetlock
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: fleetlock
+          subjects:
+          - kind: ServiceAccount
+            name: fleetlock
+            namespace: kube-system
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRole
+          metadata:
+            name: fleetlock
+          rules:
+            - apiGroups:
+                - ""
+              resources:
+                - nodes
+              verbs:
+                - list
+                - patch
+            - apiGroups:
+                - ""
+              resources:
+                - pods
+              verbs:
+                - list
+            - apiGroups:
+                - ""
+              resources:
+                - pods/eviction
+              verbs:
+                - create
+          ---
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: fleetlock
+            namespace: kube-system
+          spec:
+            replicas: 1
+            strategy:
+              type: Recreate
+            selector:
+              matchLabels:
+                name: fleetlock
+            template:
+              metadata:
+                labels:
+                  name: fleetlock
+              spec:
+                serviceAccountName: fleetlock
+                containers:
+                  - name: fleetlock
+                    image: quay.io/poseidon/fleetlock:v0.4.0-218-g2c42884-amd64
+                    env:
+                      - name: NAMESPACE
+                        value: "kube-system"
+                    ports:
+                      - name: http
+                        containerPort: 8080
+                    resources:
+                      requests:
+                        cpu: 30m
+                        memory: 30Mi
+                      limits:
+                        cpu: 50m
+                        memory: 50Mi
+                    livenessProbe:
+                      httpGet:
+                        scheme: HTTP
+                        port: 8080
+                        path: /-/healthy
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: RoleBinding
+          metadata:
+            name: fleetlock
+            namespace: kube-system
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: Role
+            name: fleetlock
+          subjects:
+          - kind: ServiceAccount
+            name: fleetlock
+            namespace: kube-system
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: Role
+          metadata:
+            name: fleetlock
+            namespace: kube-system
+          rules:
+            - apiGroups:
+                - coordination.k8s.io
+              resources:
+                - leases
+              verbs:
+                - create
+                - get
+                - update
+          ---
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: fleetlock
+            namespace: kube-system
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: fleetlock
+            namespace: kube-system
+            annotations:
+              prometheus.io/scrape: 'true'
+              prometheus.io/port: '8080'
+          spec:
+            type: ClusterIP
+            clusterIP: 10.43.254.100
+            selector:
+              name: fleetlock
+            ports:
+              - name: http
+                protocol: TCP
+                port: 80
+                targetPort: 8080
+          ---

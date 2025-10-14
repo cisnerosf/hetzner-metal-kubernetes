@@ -1,0 +1,128 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate-yaml:
+    name: Validate YAML Syntax
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install PyYAML for validation
+      run: pip install pyyaml
+
+    - name: Validate YAML files in playbooks folder
+      run: |
+        echo "Validating YAML files in playbooks folder..."
+        for file in playbooks/*.yml; do
+          if [ -f "$file" ]; then
+            echo "Checking: $file"
+            python -c "import yaml; yaml.safe_load(open('$file', 'r'))" || (echo "YAML syntax error in $file" && exit 1)
+          fi
+        done
+
+    - name: Validate YAML files in artifacts folder
+      run: |
+        echo "Validating YAML files in artifacts folder..."
+        for file in artifacts/*.yml; do
+          if [ -f "$file" ]; then
+            echo "Checking: $file"
+            python -c "import yaml; yaml.safe_load(open('$file', 'r'))" || (echo "YAML syntax error in $file" && exit 1)
+          fi
+        done
+
+    - name: Install ruamel.yaml for Butane fragment merging
+      run: pip install ruamel.yaml
+
+    - name: Install Ansible
+      run: pip install ansible-core==2.19
+
+    - name: Download Butane
+      run: |
+        curl -L -o /tmp/butane "https://github.com/coreos/butane/releases/download/v0.25.1/butane-x86_64-unknown-linux-gnu"
+        chmod +x /tmp/butane
+        echo "Downloaded Butane v0.25.1"
+
+    - name: Merge butane fragments
+      run: |
+        echo "Merging butane fragments..."
+        python3 - << 'EOF'
+        from pathlib import Path
+        from ruamel.yaml import YAML
+
+        yaml = YAML()
+        merged_data = {}
+
+        def deep_merge(dict1, dict2):
+            for key, value in dict2.items():
+                if key in dict1 and isinstance(value, dict) and isinstance(dict1[key], dict):
+                    deep_merge(dict1[key], value)
+                elif key in dict1 and isinstance(value, list) and isinstance(dict1[key], list):
+                    dict1[key].extend(value)
+                else:
+                    dict1[key] = value
+
+        for yaml_file in sorted(Path("artifacts").glob("*.yml")):
+            with open(yaml_file, 'r') as f:
+                deep_merge(merged_data, yaml.load(f))
+
+        with open("/tmp/merged_butane.yml", 'w') as f:
+            yaml.dump(merged_data, f)
+
+        print("Merged butane fragments into /tmp/merged_butane.yml")
+        EOF
+
+    - name: Validate merged butane file
+      run: |
+        echo "Validating merged butane file with butane --check..."
+        /tmp/butane --strict --check /tmp/merged_butane.yml || (echo "Butane validation failed" && exit 1)
+        echo "Butane validation passed successfully"
+
+    - name: Validate Ansible playbook syntax
+      run: |
+        echo "Validating Ansible playbook syntax..."
+        for playbook in playbooks/*.yml; do
+          if [ -f "$playbook" ]; then
+            echo "Checking syntax for: $playbook"
+            ansible-playbook --syntax-check "$playbook" || (echo "Ansible syntax error in $playbook" && exit 1)
+          fi
+        done
+        echo "Ansible syntax validation passed successfully"
+
+  test-code:
+    name: Run Tests and Linting
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: pip install -r requirements-test.txt
+
+    - name: Run pylint
+      run: pylint utils.py tests/ --fail-under=9.0
+
+    - name: Run tests with coverage
+      run: pytest --cov=utils --cov-report=html --cov-report=term-missing
+
+    - name: Upload coverage reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: htmlcov/
