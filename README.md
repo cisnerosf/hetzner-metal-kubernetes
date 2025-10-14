@@ -24,6 +24,7 @@ This is an **MVP** that demonstrates the core concepts. We welcome contributions
 - [Helpful Fedora CoreOS Commands](#helpful-fedora-coreos-commands)
 - [Troubleshooting](#troubleshooting)
   - [Cannot boot server in Rescue Mode after installing Fedora CoreOS](#cannot-boot-server-in-rescue-mode-after-installing-fedora-coreos)
+  - [Server fails to connect to another server over VLAN IP](#server-fails-to-connect-to-another-server-over-vlan-ip)
 - [Todo](#todo)
 
 # Overview
@@ -197,6 +198,14 @@ pytest --cov=utils --cov-report=html --cov-report=term-missing
   sudo umount /boot/efi/
   ```
 4. Enable Rescue Mode and reboot the machine.
+
+### Server fails to connect to another server over VLAN IP
+
+1. Go to the Hetzner dashboard at https://robot.hetzner.com/vswitch/index
+2. Verify that your vSwitch is configured with the correct VLAN ID that matches the `vlan` variable in your `inventory.yml` file
+3. Check the server assignments for your vSwitch:
+   - If the problematic server is missing from the vSwitch, add it using: `./utils.py set_vswitch <hostname>`
+4. Check if the server is assigned to other vSwitches, remove it from the incorrect vSwitch(s) in the dashboard
 
 ## Todo
 
