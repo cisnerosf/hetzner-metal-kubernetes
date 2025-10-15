@@ -40,6 +40,7 @@ Automates deploying K3S (single-server or HA) on Hetzner dedicated servers with 
 - **Cloudflare Full (strict) and AOP**: `artifacts/butane-k3s-manifests.yml` contains manifests that configures Authenticated Origin Pulls (mTLS) with Full (strict) mode for Traefik on port 443.
 - **Fedora CoreOS**: designed for running containerized workloads securely and at scale, offering an immutable, minimal and automatically updating operating system that enhances reliability and security.
 - **Reboot Coordination**:  [fleetlock](https://github.com/poseidon/fleetlock) reboot coordinator for the nodes in the cluster.
+- **Disk Encryption**: Encrypt disks using LUKS with TPM2.
 
 ## Cluster setup
 1. Setup `utils` CLI (see section below) and install Ansible (`brew update; brew install ansible;`)
@@ -68,6 +69,7 @@ hetzner_k3s_metal:
       setup: worker
       vlan_ip: 10.100.100.4
   vars:
+    disk_encryption: false
     vlan: 4060
     k3s_token: --REPLACE_ME--
     first_master: shadrach
@@ -83,7 +85,8 @@ hetzner_k3s_metal:
 4. Run `./utils.py provision_all` to provision all servers, then set each host’s `ansible_password` to its rescue password.
 5. Set `first_master` to the host name of the 1st K3S master node in the cluster.
 6. Enable [Full (strict) mode](https://developers.cloudflare.com/ssl/origin-configuration/ssl-modes/full-strict/) and [Authenticated Origin Pulls (mTLS)](https://developers.cloudflare.com/ssl/origin-configuration/authenticated-origin-pull/) for your domain on your Cloudflare and save the certifcate to `cf_origin_cert` and private key to `cf_origin_cert_key`.
-7. Run `ansible-playbook playbooks/k3s_metal.yml` and wait for the machines to reboot.
+7. Set `disk_encryption` to `true` to enable disk encryption. **Requires:** TPM2 enabled via [KVM console](https://docs.hetzner.com/robot/dedicated-server/maintenance/kvm-console/).
+8. Run `ansible-playbook playbooks/k3s_metal.yml` and wait for the machines to reboot.
 
 **Note:** For single-server setup, set `inventory.yml` to:
 ```yaml
@@ -95,6 +98,7 @@ hetzner_k3s_metal:
       setup: master
       vlan_ip: 10.100.100.1
   vars:
+    disk_encryption: false
     vlan: 4060
     k3s_token: --REPLACE_ME--
     first_master: shadrach
@@ -209,7 +213,7 @@ pytest --cov=utils --cov-report=html --cov-report=term-missing
 
 ## Todo
 
-- [ ] Enable [filesystem encryption](https://docs.fedoraproject.org/en-US/fedora-coreos/storage/#_advanced_examples) (LUKS)
+- [ ] Implement [K3S Hardening Guide](https://docs.k3s.io/security/hardening-guide)
 - [ ] Extend [rancher-monitoring](https://github.com/rancher/charts/tree/dev-v2.12/charts/rancher-monitoring) Helm chart to seamlessly set up log management and metrics during the cluster bootstrapping process:
   - [ ] Integrate Grafana Loki
   - [ ] Integrate Grafana Alloy
