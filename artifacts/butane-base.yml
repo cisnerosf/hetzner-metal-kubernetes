@@ -37,7 +37,7 @@ storage:
         - /dev/disk/by-partlabel/var-1
         - /dev/disk/by-partlabel/var-2
   filesystems:
-    - device: /dev/md/md-var
+    - device: "!!VAR_DEVICE!!"
       path: /var
       format: xfs
       wipe_filesystem: true

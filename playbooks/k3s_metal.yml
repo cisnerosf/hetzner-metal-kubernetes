@@ -104,6 +104,19 @@
       when: duplicate_ips | length > 0
       run_once: true
 
+    - name: Check TPM2 availability for disk encryption
+      stat:
+        path: /sys/class/tpm/tpm0
+      register: tpm2_check
+      when: disk_encryption | bool
+
+    - name: Fail if TPM2 is not available
+      fail:
+        msg: "TPM2 is not available. LUKS encryption requires TPM2 support."
+      when:
+        - disk_encryption | bool
+        - not tpm2_check.stat.exists
+
 
   tasks:
     - name: Preflight facts and variables
@@ -234,6 +247,13 @@
             force: yes
           tags: [butane]
 
+        - name: Remove LUKS fragment if disk encryption is disabled
+          file:
+            path: "{{ butane_temp_dir }}/butane-luks.yml"
+            state: absent
+          when: not disk_encryption | bool
+          tags: [butane]
+
         - name: Merge butane fragments
           ansible.builtin.command:
             cmd: /usr/bin/python3 -
@@ -318,6 +338,9 @@
               replace: "{{ vlan }}"
             - regexp: '!!VLAND_IP!!'
               replace: "{{ vlan_ip }}"
+            - regexp: '!!VAR_DEVICE!!'
+              replace: >-
+                {%- if disk_encryption | bool -%}/dev/mapper/var{%- else -%}/dev/md/md-var{%- endif -%}
           tags: [butane]
 
         - name: Compile butane.yml file
