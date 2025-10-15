@@ -267,3 +267,46 @@ storage:
                 port: 80
                 targetPort: 8080
           ---
+    - path: /var/lib/rancher/k3s/server/psa.yaml
+      mode: 0644
+      contents:
+        inline: |
+          apiVersion: apiserver.config.k8s.io/v1
+          kind: AdmissionConfiguration
+          plugins:
+          - name: PodSecurity
+            configuration:
+              apiVersion: pod-security.admission.config.k8s.io/v1beta1
+              kind: PodSecurityConfiguration
+              defaults:
+                enforce: "restricted"
+                enforce-version: "latest"
+                audit: "restricted"
+                audit-version: "latest"
+                warn: "restricted"
+                warn-version: "latest"
+              exemptions:
+                usernames: []
+                runtimeClasses: []
+                namespaces:
+                  - kube-system
+                  - cis-operator-system
+                  - cattle-fleet-local-system
+                  - cattle-fleet-system
+                  - cattle-monitoring-system
+                  - cattle-system
+                  - cattle-provisioning-capi-system
+                  - fleet-default
+          - name: EventRateLimit
+            configuration:
+              apiVersion: eventratelimit.admission.k8s.io/v1alpha1
+              kind: Configuration
+              limits:
+              - type: Namespace
+                qps: 60
+                burst: 120
+                cacheSize: 4096
+              - type: User
+                qps: 15
+                burst: 30
+                cacheSize: 4096

@@ -101,6 +101,15 @@ storage:
       contents:
         inline: |
           fs.inotify.max_user_instances = 2048
+    - path: /etc/sysctl.d/99-k3s-kernel.conf
+      mode: 0644
+      contents:
+        inline: |
+          # Kernel panic and memory management settings
+          vm.panic_on_oom = 0
+          vm.overcommit_memory = 1
+          kernel.panic = 10
+          kernel.panic_on_oops = 1
     - path: /etc/ssh/sshd_config.d/90-hardening.conf
       overwrite: true
       mode: 0600
