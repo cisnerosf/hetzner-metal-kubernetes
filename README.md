@@ -27,7 +27,6 @@ This is an **MVP** that demonstrates the core concepts. We welcome contributions
 - [Troubleshooting](#troubleshooting)
   - [Cannot boot server in Rescue Mode after installing Fedora CoreOS](#cannot-boot-server-in-rescue-mode-after-installing-fedora-coreos)
   - [Server fails to connect to another server over VLAN IP](#server-fails-to-connect-to-another-server-over-vlan-ip)
-- [Todo](#todo)
 
 # Overview
 
@@ -128,7 +127,7 @@ You may follow the instructions at https://github.com/cisnerosf/tang-server to s
 
 To enable encryption:
 
-1. Set `tang_url` to the address of your Tang server.
+1. Set `tang_url` to the address of your Tang server (no trailing slash `/`).
 2. Run `tang-show-keys 8000` inside the Tang server container and save the output to `tang_thumbprint`.
 3. Follow the same steps from **Cluster setup**.
 
@@ -141,7 +140,7 @@ hetzner_k3s_metal:
       setup: master
       vlan_ip: 10.100.100.1
   vars:
-    tang_url: "https://my-tang-server.mydomain.com/"
+    tang_url: "https://my-tang-server.mydomain.com"
     tang_thumbprint: "l3fZGUCmnvKQF_OA6VZF9jf8z2s"
     vlan: 4060
     ...

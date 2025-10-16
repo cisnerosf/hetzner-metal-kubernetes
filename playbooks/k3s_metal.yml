@@ -104,6 +104,19 @@
       when: duplicate_ips | length > 0
       run_once: true
 
+    - name: Validate tang_url and tang_thumbprint when disk encryption is enabled
+      block:
+        - name: Check tang_url is a valid URL
+          fail:
+            msg: "tang_url '{{ tang_url }}' is not a valid URL"
+          when: tang_url is defined and tang_url != "" and not (tang_url | regex_search('^https?://[^/]+(?::\\d+)?$'))
+          run_once: true
+
+        - name: Check tang_thumbprint is defined and not empty
+          fail:
+            msg: "tang_thumbprint must be defined and not empty when tang_url is provided"
+          when: tang_url is defined and tang_url != "" and (tang_thumbprint is not defined or tang_thumbprint == "")
+          run_once: true
 
 
   tasks:
