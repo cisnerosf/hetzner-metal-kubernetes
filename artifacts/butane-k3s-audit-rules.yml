@@ -2,6 +2,7 @@ storage:
   directories:
     - path: /var/log/k3s
       overwrite: true
+      mode: 0700
   files:
     - path: /etc/k3s-audit.yml
       mode: 0644
@@ -68,11 +69,12 @@ storage:
 
           # Log any unauthorized calls
           - level: RequestResponse
-            responseCodes:
-            - 401
-            - 403
-            - 422
-            - 429
+            responseStatus:
+              codes:
+              - 401
+              - 403
+              - 422
+              - 429
             omitStages:
             - RequestReceived
 
