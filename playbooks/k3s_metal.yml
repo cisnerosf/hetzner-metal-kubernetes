@@ -105,6 +105,7 @@
       run_once: true
 
 
+
   tasks:
     - name: Preflight facts and variables
       block:
@@ -208,7 +209,6 @@
               - libzstd-dev
               - openssl
               - jq
-              - jose
               - python3-ruamel.yaml
             state: present
             install_recommends: no
@@ -219,20 +219,6 @@
           args:
             creates: /usr/local/bin/coreos-installer
           tags: [tools, coreos]
-
-        - name: Fetch Tang server thumbprint
-          shell: |
-            curl -s -f --connect-timeout 10 --max-time 30 "{{ tang_url }}/adv" | jose jwk thp -i -
-          register: tang_thumbprint_response
-          when: tang_url is defined and tang_url != ""
-          failed_when: tang_thumbprint_response.rc != 0
-          tags: [tang]
-
-        - name: Set tang_thumbprint variable
-          set_fact:
-            tang_thumbprint: "{{ tang_thumbprint_response.stdout.strip() }}"
-          when: tang_url is defined and tang_url != ""
-          tags: [tang]
 
     - name: Prepare Butane config and compile Ignition
       block:

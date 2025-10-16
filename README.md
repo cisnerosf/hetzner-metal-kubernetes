@@ -72,6 +72,7 @@ hetzner_k3s_metal:
       vlan_ip: 10.100.100.4
   vars:
     tang_url: ""
+    tang_thumbprint: ""
     vlan: 4060
     k3s_token: --REPLACE_ME--
     first_master: shadrach
@@ -108,6 +109,7 @@ hetzner_k3s_metal:
       vlan_ip: 10.100.100.1
   vars:
     tang_url: ""
+    tang_thumbprint: ""
     vlan: 4060
     k3s_token: --REPLACE_ME--
     first_master: shadrach
@@ -122,10 +124,14 @@ hetzner_k3s_metal:
 
 ## Disk encryption
 To enable disk encryption with LUKS you will need a [Tang server](https://github.com/latchset/tang) running.
-
 You may follow the instructions at https://github.com/cisnerosf/tang-server to set up your personal Tang server.
 
-To enable encryption set `tang_url` to the address of your Tang server and follow the same steps from **Cluster setup**, e.g:
+To enable encryption:
+
+1. Set `tang_url` to the address of your Tang server.
+2. Run `tang-show-keys 8000` inside the Tang server container and save the output to `tang_thumbprint`.
+3. Follow the same steps from **Cluster setup**.
+
 ```yaml
 hetzner_k3s_metal:
   hosts:
@@ -136,6 +142,7 @@ hetzner_k3s_metal:
       vlan_ip: 10.100.100.1
   vars:
     tang_url: "https://my-tang-server.mydomain.com/"
+    tang_thumbprint: "l3fZGUCmnvKQF_OA6VZF9jf8z2s"
     vlan: 4060
     ...
 ```
