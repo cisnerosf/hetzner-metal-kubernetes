@@ -328,7 +328,6 @@
                 --kube-apiserver-arg="audit-log-maxbackup=10"
                 --kube-apiserver-arg="enable-admission-plugins=NodeRestriction,EventRateLimit"
                 --kube-apiserver-arg="admission-control-config-file=/var/lib/rancher/k3s/server/psa.yaml"
-                --kube-apiserver-arg="service-account-extend-token-expiration=false"
                 --kube-controller-manager-arg="terminated-pod-gc-threshold=20"
                 --kubelet-arg="streaming-connection-idle-timeout=30m"
                 --kubelet-arg="tls-cipher-suites=TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305"

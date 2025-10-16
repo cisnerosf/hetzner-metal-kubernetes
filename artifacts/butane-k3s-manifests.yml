@@ -279,7 +279,7 @@ storage:
               apiVersion: pod-security.admission.config.k8s.io/v1beta1
               kind: PodSecurityConfiguration
               defaults:
-                enforce: "restricted"
+                enforce: "baseline"
                 enforce-version: "latest"
                 audit: "restricted"
                 audit-version: "latest"
@@ -291,12 +291,7 @@ storage:
                 namespaces:
                   - kube-system
                   - cis-operator-system
-                  - cattle-fleet-local-system
-                  - cattle-fleet-system
                   - cattle-monitoring-system
-                  - cattle-system
-                  - cattle-provisioning-capi-system
-                  - fleet-default
           - name: EventRateLimit
             configuration:
               apiVersion: eventratelimit.admission.k8s.io/v1alpha1
