@@ -104,19 +104,6 @@
       when: duplicate_ips | length > 0
       run_once: true
 
-    - name: Check TPM2 availability for disk encryption
-      stat:
-        path: /sys/class/tpm/tpm0
-      register: tpm2_check
-      when: disk_encryption | bool
-
-    - name: Fail if TPM2 is not available
-      fail:
-        msg: "TPM2 is not available. LUKS encryption requires TPM2 support."
-      when:
-        - disk_encryption | bool
-        - not tpm2_check.stat.exists
-
 
   tasks:
     - name: Preflight facts and variables
@@ -221,6 +208,7 @@
               - libzstd-dev
               - openssl
               - jq
+              - jose
               - python3-ruamel.yaml
             state: present
             install_recommends: no
@@ -231,6 +219,20 @@
           args:
             creates: /usr/local/bin/coreos-installer
           tags: [tools, coreos]
+
+        - name: Fetch Tang server thumbprint
+          shell: |
+            curl -s -f --connect-timeout 10 --max-time 30 "{{ tang_url }}/adv" | jose jwk thp -i -
+          register: tang_thumbprint_response
+          when: tang_url is defined and tang_url != ""
+          failed_when: tang_thumbprint_response.rc != 0
+          tags: [tang]
+
+        - name: Set tang_thumbprint variable
+          set_fact:
+            tang_thumbprint: "{{ tang_thumbprint_response.stdout.strip() }}"
+          when: tang_url is defined and tang_url != ""
+          tags: [tang]
 
     - name: Prepare Butane config and compile Ignition
       block:
@@ -251,7 +253,7 @@
           file:
             path: "{{ butane_temp_dir }}/butane-luks.yml"
             state: absent
-          when: not disk_encryption | bool
+          when: tang_url is not defined or tang_url == ""
           tags: [butane]
 
         - name: Merge butane fragments
@@ -338,9 +340,13 @@
               replace: "{{ vlan }}"
             - regexp: '!!VLAND_IP!!'
               replace: "{{ vlan_ip }}"
+            - regexp: '!!TANG_URL!!'
+              replace: "{{ tang_url }}"
+            - regexp: '!!TANG_THUMBPRINT!!'
+              replace: "{{ tang_thumbprint }}"
             - regexp: '!!VAR_DEVICE!!'
               replace: >-
-                {%- if disk_encryption | bool -%}/dev/mapper/var{%- else -%}/dev/md/md-var{%- endif -%}
+                {%- if tang_url is defined and tang_url != "" -%}/dev/mapper/var{%- else -%}/dev/md/md-var{%- endif -%}
           tags: [butane]
 
         - name: Compile butane.yml file
