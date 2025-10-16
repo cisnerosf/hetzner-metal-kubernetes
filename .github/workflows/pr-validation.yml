@@ -85,7 +85,6 @@ jobs:
     - name: Replace placeholders in merged butane file
       run: |
         echo "Replacing placeholders in merged butane file..."
-        sed -i 's/!!VAR_DEVICE!!/\/dev\/md\/md-var/g' /tmp/merged_butane.yml
         sed -i 's/!!HOSTNAME!!/test-host/g' /tmp/merged_butane.yml
         sed -i 's/!!DISK_0!!/nvme0n1/g' /tmp/merged_butane.yml
         sed -i 's/!!DISK_1!!/nvme1n1/g' /tmp/merged_butane.yml
@@ -94,6 +93,8 @@ jobs:
         sed -i 's/!!VLAN!!/100/g' /tmp/merged_butane.yml
         sed -i 's/!!VLAND_IP!!/10.100.100.10/g' /tmp/merged_butane.yml
         sed -i 's/!!K3S_TOKEN!!/NE0xJtNb2kVPFbnZVMp6gEUqO79jwlx8DlmgWJxc7hSkkS6SddtmEPY6u7qdIHAsU1mbcI1hWj7oaBrVgifHaNRgCpUiNfU03CFQ/g' /tmp/merged_butane.yml
+        sed -i 's/!!TANG_URL!!/https:\/\/tang.example.com/g' /tmp/merged_butane.yml
+        sed -i 's/!!TANG_THUMBPRINT!!/example-thumbprint-12345/g' /tmp/merged_butane.yml
         echo "Placeholders replaced successfully"
 
     - name: Validate merged butane file

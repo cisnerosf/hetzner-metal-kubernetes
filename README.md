@@ -16,6 +16,8 @@ This is an **MVP** that demonstrates the core concepts. We welcome contributions
 
 - [Overview](#overview)
 - [Cluster setup](#cluster-setup)
+- [Single-server setup](#single-server-setup)
+- [Disk encryption](#disk-encryption)
 - [utils CLI](#utils-cli)
   - [Setup](#setup)
   - [Commands overview](#commands-overview)
@@ -25,7 +27,6 @@ This is an **MVP** that demonstrates the core concepts. We welcome contributions
 - [Troubleshooting](#troubleshooting)
   - [Cannot boot server in Rescue Mode after installing Fedora CoreOS](#cannot-boot-server-in-rescue-mode-after-installing-fedora-coreos)
   - [Server fails to connect to another server over VLAN IP](#server-fails-to-connect-to-another-server-over-vlan-ip)
-- [Todo](#todo)
 
 # Overview
 
@@ -40,7 +41,7 @@ Automates deploying K3S (single-server or HA) on Hetzner dedicated servers with 
 - **Cloudflare Full (strict) and AOP**: `artifacts/butane-k3s-manifests.yml` contains manifests that configures Authenticated Origin Pulls (mTLS) with Full (strict) mode for Traefik on port 443.
 - **Fedora CoreOS**: designed for running containerized workloads securely and at scale, offering an immutable, minimal and automatically updating operating system that enhances reliability and security.
 - **Reboot Coordination**:  [fleetlock](https://github.com/poseidon/fleetlock) reboot coordinator for the nodes in the cluster.
-- **Disk Encryption**: Encrypt disks using LUKS with TPM2.
+- **Disk Encryption**: Encrypt disks with LUKS using [Tang](https://github.com/latchset/tang)
 
 ## Cluster setup
 1. Setup `utils` CLI (see section below) and install Ansible (`brew update; brew install ansible;`)
@@ -69,7 +70,8 @@ hetzner_k3s_metal:
       setup: worker
       vlan_ip: 10.100.100.4
   vars:
-    disk_encryption: false
+    tang_url: ""
+    tang_thumbprint: ""
     vlan: 4060
     k3s_token: --REPLACE_ME--
     first_master: shadrach
@@ -85,10 +87,17 @@ hetzner_k3s_metal:
 4. Run `./utils.py provision_all` to provision all servers, then set each host’s `ansible_password` to its rescue password.
 5. Set `first_master` to the host name of the 1st K3S master node in the cluster.
 6. Enable [Full (strict) mode](https://developers.cloudflare.com/ssl/origin-configuration/ssl-modes/full-strict/) and [Authenticated Origin Pulls (mTLS)](https://developers.cloudflare.com/ssl/origin-configuration/authenticated-origin-pull/) for your domain on your Cloudflare and save the certifcate to `cf_origin_cert` and private key to `cf_origin_cert_key`.
-7. Set `disk_encryption` to `true` to enable disk encryption. **Requires:** TPM2 enabled via [KVM console](https://docs.hetzner.com/robot/dedicated-server/maintenance/kvm-console/).
-8. Run `ansible-playbook playbooks/k3s_metal.yml` and wait for the machines to reboot.
+7. Run `ansible-playbook playbooks/k3s_metal.yml` and wait for the machines to reboot.
 
-**Note:** For single-server setup, set `inventory.yml` to:
+**Note:** If you want to bootstrap only one node within a cluster:
+```
+./utils.py provision $HOST
+ansible-playbook playbooks/k3s_metal.yml --limit "$HOST"
+```
+
+## Single-server setup
+
+1. Follow the same steps from **Cluster setup** and set `inventory.yml` to :
 ```yaml
 hetzner_k3s_metal:
   hosts:
@@ -98,7 +107,8 @@ hetzner_k3s_metal:
       setup: master
       vlan_ip: 10.100.100.1
   vars:
-    disk_encryption: false
+    tang_url: ""
+    tang_thumbprint: ""
     vlan: 4060
     k3s_token: --REPLACE_ME--
     first_master: shadrach
@@ -111,10 +121,29 @@ hetzner_k3s_metal:
       G9w0BAQEFAgAwIBAgIUAASCBKcwggSj.....
 ```
 
-**Note:** If you want to bootstrap only one node within a cluster:
-```
-./utils.py provision $HOST
-ansible-playbook playbooks/k3s_metal.yml --limit "$HOST"
+## Disk encryption
+To enable disk encryption with LUKS you will need a [Tang server](https://github.com/latchset/tang) running.
+You may follow the instructions at https://github.com/cisnerosf/tang-server to set up your personal Tang server.
+
+To enable encryption:
+
+1. Set `tang_url` to the address of your Tang server (no trailing slash `/`).
+2. Run `tang-show-keys 8000` inside the Tang server container and save the output to `tang_thumbprint`.
+3. Follow the same steps from **Cluster setup**.
+
+```yaml
+hetzner_k3s_metal:
+  hosts:
+    shadrach:
+      ansible_host: 195.201.160.126
+      ansible_password: --REPLACE_ME--
+      setup: master
+      vlan_ip: 10.100.100.1
+  vars:
+    tang_url: "https://my-tang-server.mydomain.com"
+    tang_thumbprint: "l3fZGUCmnvKQF_OA6VZF9jf8z2s"
+    vlan: 4060
+    ...
 ```
 
 ## `utils` CLI
@@ -211,10 +240,3 @@ pytest --cov=utils --cov-report=html --cov-report=term-missing
    - If the problematic server is missing from the vSwitch, add it using: `./utils.py set_vswitch <hostname>`
 4. Check if the server is assigned to other vSwitches, remove it from the incorrect vSwitch(s) in the dashboard
 
-## Todo
-
-- [ ] Implement [K3S Hardening Guide](https://docs.k3s.io/security/hardening-guide)
-- [ ] Extend [rancher-monitoring](https://github.com/rancher/charts/tree/dev-v2.12/charts/rancher-monitoring) Helm chart to seamlessly set up log management and metrics during the cluster bootstrapping process:
-  - [ ] Integrate Grafana Loki
-  - [ ] Integrate Grafana Alloy
-  - [ ] Enable HA deployment mode

@@ -104,18 +104,19 @@
       when: duplicate_ips | length > 0
       run_once: true
 
-    - name: Check TPM2 availability for disk encryption
-      stat:
-        path: /sys/class/tpm/tpm0
-      register: tpm2_check
-      when: disk_encryption | bool
+    - name: Validate tang_url and tang_thumbprint when disk encryption is enabled
+      block:
+        - name: Check tang_url is a valid URL
+          fail:
+            msg: "tang_url '{{ tang_url }}' is not a valid URL"
+          when: tang_url is defined and tang_url != "" and not (tang_url | regex_search('^https?://[^/]+(?::\\d+)?$'))
+          run_once: true
 
-    - name: Fail if TPM2 is not available
-      fail:
-        msg: "TPM2 is not available. LUKS encryption requires TPM2 support."
-      when:
-        - disk_encryption | bool
-        - not tpm2_check.stat.exists
+        - name: Check tang_thumbprint is defined and not empty
+          fail:
+            msg: "tang_thumbprint must be defined and not empty when tang_url is provided"
+          when: tang_url is defined and tang_url != "" and (tang_thumbprint is not defined or tang_thumbprint == "")
+          run_once: true
 
 
   tasks:
@@ -251,7 +252,7 @@
           file:
             path: "{{ butane_temp_dir }}/butane-luks.yml"
             state: absent
-          when: not disk_encryption | bool
+          when: tang_url is not defined or tang_url == ""
           tags: [butane]
 
         - name: Merge butane fragments
@@ -338,9 +339,10 @@
               replace: "{{ vlan }}"
             - regexp: '!!VLAND_IP!!'
               replace: "{{ vlan_ip }}"
-            - regexp: '!!VAR_DEVICE!!'
-              replace: >-
-                {%- if disk_encryption | bool -%}/dev/mapper/var{%- else -%}/dev/md/md-var{%- endif -%}
+            - regexp: '!!TANG_URL!!'
+              replace: "{{ tang_url }}"
+            - regexp: '!!TANG_THUMBPRINT!!'
+              replace: "{{ tang_thumbprint }}"
           tags: [butane]
 
         - name: Compile butane.yml file
