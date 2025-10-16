@@ -292,6 +292,8 @@ storage:
                   - kube-system
                   - cis-operator-system
                   - cattle-monitoring-system
+                  - monitoring
+                  - logging
           - name: EventRateLimit
             configuration:
               apiVersion: eventratelimit.admission.k8s.io/v1alpha1
