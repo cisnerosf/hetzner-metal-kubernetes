@@ -42,6 +42,7 @@ Automates deploying K3S (single-server or HA) on Hetzner dedicated servers with 
 - **Fedora CoreOS**: designed for running containerized workloads securely and at scale, offering an immutable, minimal and automatically updating operating system that enhances reliability and security.
 - **Reboot Coordination**:  [fleetlock](https://github.com/poseidon/fleetlock) reboot coordinator for the nodes in the cluster.
 - **Disk Encryption**: Encrypt disks with LUKS using [Tang](https://github.com/latchset/tang)
+- **CIS Hardening**: based on [K3S CIS Hardening Guide](https://docs.k3s.io/security/hardening-guide) (partial implementation)
 
 ## Cluster setup
 1. Setup `utils` CLI (see section below) and install Ansible (`brew update; brew install ansible;`)
@@ -239,4 +240,3 @@ pytest --cov=utils --cov-report=html --cov-report=term-missing
 3. Check the server assignments for your vSwitch:
    - If the problematic server is missing from the vSwitch, add it using: `./utils.py set_vswitch <hostname>`
 4. Check if the server is assigned to other vSwitches, remove it from the incorrect vSwitch(s) in the dashboard
-
