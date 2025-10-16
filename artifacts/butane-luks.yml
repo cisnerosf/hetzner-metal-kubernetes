@@ -4,13 +4,3 @@ boot_device:
     tang:
       - url: "!!TANG_URL!!"
         thumbprint: "!!TANG_THUMBPRINT!!"
-storage:
-  luks:
-    - name: var
-      device: /dev/md/md-var
-      wipe_volume: true
-      clevis:
-        tpm2: false
-        tang:
-          - url: "!!TANG_URL!!"
-            thumbprint: "!!TANG_THUMBPRINT!!"

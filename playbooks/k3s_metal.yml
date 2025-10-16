@@ -330,9 +330,6 @@
               replace: "{{ tang_url }}"
             - regexp: '!!TANG_THUMBPRINT!!'
               replace: "{{ tang_thumbprint }}"
-            - regexp: '!!VAR_DEVICE!!'
-              replace: >-
-                {%- if tang_url is defined and tang_url != "" -%}/dev/mapper/var{%- else -%}/dev/md/md-var{%- endif -%}
           tags: [butane]
 
         - name: Compile butane.yml file

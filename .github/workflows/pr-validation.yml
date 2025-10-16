@@ -85,7 +85,6 @@ jobs:
     - name: Replace placeholders in merged butane file
       run: |
         echo "Replacing placeholders in merged butane file..."
-        sed -i 's/!!VAR_DEVICE!!/\/dev\/md\/md-var/g' /tmp/merged_butane.yml
         sed -i 's/!!HOSTNAME!!/test-host/g' /tmp/merged_butane.yml
         sed -i 's/!!DISK_0!!/nvme0n1/g' /tmp/merged_butane.yml
         sed -i 's/!!DISK_1!!/nvme1n1/g' /tmp/merged_butane.yml

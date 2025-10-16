@@ -17,32 +17,6 @@ boot_device:
       - /dev/!!DISK_0!!
       - /dev/!!DISK_1!!
 storage:
-  disks:
-    - device: /dev/!!DISK_0!!
-      wipe_table: true
-      partitions:
-        - label: root-1
-          size_mib: 10240
-        - label: var-1
-    - device: /dev/!!DISK_1!!
-      wipe_table: true
-      partitions:
-        - label: root-2
-          size_mib: 10240
-        - label: var-2
-  raid:
-    - name: md-var
-      level: raid1
-      devices:
-        - /dev/disk/by-partlabel/var-1
-        - /dev/disk/by-partlabel/var-2
-  filesystems:
-    - device: "!!VAR_DEVICE!!"
-      path: /var
-      format: xfs
-      wipe_filesystem: true
-      with_mount_unit: true
-      label: var
   files:
     - path: /etc/systemd/network/25-k3s.link
       mode: 0644
