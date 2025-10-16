@@ -291,9 +291,17 @@ storage:
                 namespaces:
                   - kube-system
                   - cis-operator-system
-                  - cattle-monitoring-system
                   - monitoring
                   - logging
+                  - cattle-monitoring-system
+                  - cattle-fleet-system
+                  - cattle-fleet-local-system
+                  - cattle-system
+                  - cattle-provisioning-capi-system
+                  - cattle-impersonation-system
+                  - cattle-ui-plugin-system
+                  - fleet-default
+                  - fleet-local
           - name: EventRateLimit
             configuration:
               apiVersion: eventratelimit.admission.k8s.io/v1alpha1
