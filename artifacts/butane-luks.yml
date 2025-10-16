@@ -1,5 +1,4 @@
 boot_device:
-  tpm2: false
   luks:
     tang:
       - url: "!!TANG_URL!!"
