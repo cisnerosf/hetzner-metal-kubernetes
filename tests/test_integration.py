@@ -169,6 +169,7 @@ class TestIntegration:
             }
             mock_client.check_vswitch_servers_ready.return_value = True
             mock_client.assign_server_to_vswitch.return_value = {"success": True}
+            mock_client.set_vswitch_batch.return_value = (3, 3)  # (success_count, total_count)
 
             # Change to test directory
             with patch('utils.Path.cwd', return_value=temp_dir):
@@ -176,8 +177,16 @@ class TestIntegration:
                     result = main(["set_vswitch_all"])
 
         assert result == 0
-        # Verify that assign_server_to_vswitch was called once with all three IPs
-        mock_client.assign_server_to_vswitch.assert_called_once_with(123, ["94.130.9.179", "94.130.9.180", "94.130.9.181"])
+        # Verify that set_vswitch_batch was called with the correct server data
+        mock_client.set_vswitch_batch.assert_called_once()
+        call_args = mock_client.set_vswitch_batch.call_args
+        server_data = call_args[0][0]  # First positional argument
+        vlan = call_args[0][1]  # Second positional argument
+        assert vlan == 4077
+        assert len(server_data) == 3
+        # Check that all three servers are in the data
+        server_numbers = [data[1] for data in server_data]  # server_number is second element
+        assert set(server_numbers) == {321, 322, 323}
 
     def test_provision_workflow_integration(self, temp_dir, mock_hetzner_api_responses):
         """Test complete provision workflow integration."""

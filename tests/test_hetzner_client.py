@@ -280,6 +280,131 @@ class TestHetznerRobotClient:
         assert result is None
 
     @patch('time.sleep')
+    @patch('utils.requests.post')
+    def test_set_vswitch_batch_success(self, mock_post, mock_sleep):
+        """Test successful batch vswitch assignment."""
+        # Mock successful API responses
+        mock_response = Mock()
+        mock_response.raise_for_status.return_value = None
+        mock_post.return_value = mock_response
+
+        client = HetznerRobotClient(user="test_user", password="test_pass")
+
+        # Mock the internal methods that set_vswitch_batch calls
+        with patch.object(client, 'get_vswitches') as mock_get_vswitches, \
+             patch.object(client, 'get_vswitch_details') as mock_get_details, \
+             patch.object(client, 'check_vswitch_servers_ready') as mock_check_ready, \
+             patch.object(client, 'assign_server_to_vswitch') as mock_assign:
+
+            mock_get_vswitches.return_value = [
+                {
+                    "id": 123,
+                    "vlan": 4077,
+                    "cancelled": False,
+                    "name": "existing-vswitch"
+                }
+            ]
+            mock_get_details.return_value = {
+                "server": []  # No servers assigned yet
+            }
+            mock_check_ready.return_value = True
+            mock_assign.return_value = {"success": True}
+
+            server_data = [
+                ("host1", 321, "94.130.9.179"),
+                ("host2", 322, "94.130.9.180"),
+                ("host3", 323, "94.130.9.181")
+            ]
+
+            result = client.set_vswitch_batch(server_data, 4077)
+
+            assert result == (3, 3)  # (success_count, total_count)
+            mock_assign.assert_called_once_with(123, ["94.130.9.179", "94.130.9.180", "94.130.9.181"])
+
+    @patch('time.sleep')
+    @patch('utils.requests.post')
+    def test_set_vswitch_batch_with_existing_assignments(self, mock_post, mock_sleep):
+        """Test batch vswitch assignment when some servers are already assigned."""
+        # Mock successful API responses
+        mock_response = Mock()
+        mock_response.raise_for_status.return_value = None
+        mock_post.return_value = mock_response
+
+        client = HetznerRobotClient(user="test_user", password="test_pass")
+
+        # Mock the internal methods that set_vswitch_batch calls
+        with patch.object(client, 'get_vswitches') as mock_get_vswitches, \
+             patch.object(client, 'get_vswitch_details') as mock_get_details, \
+             patch.object(client, 'check_vswitch_servers_ready') as mock_check_ready, \
+             patch.object(client, 'assign_server_to_vswitch') as mock_assign:
+
+            mock_get_vswitches.return_value = [
+                {
+                    "id": 123,
+                    "vlan": 4077,
+                    "cancelled": False,
+                    "name": "existing-vswitch"
+                }
+            ]
+            mock_get_details.return_value = {
+                "server": [
+                    {"server_number": 321, "status": "ready"}  # Server 321 already assigned
+                ]
+            }
+            mock_check_ready.return_value = True
+            mock_assign.return_value = {"success": True}
+
+            server_data = [
+                ("host1", 321, "94.130.9.179"),  # Already assigned
+                ("host2", 322, "94.130.9.180"),  # Not assigned
+                ("host3", 323, "94.130.9.181")   # Not assigned
+            ]
+
+            result = client.set_vswitch_batch(server_data, 4077)
+
+            assert result == (2, 3)  # (success_count, total_count)
+            # Should only assign the two unassigned servers
+            mock_assign.assert_called_once_with(123, ["94.130.9.180", "94.130.9.181"])
+
+    @patch('time.sleep')
+    def test_set_vswitch_batch_all_already_assigned(self, mock_sleep):
+        """Test batch vswitch assignment when all servers are already assigned."""
+        client = HetznerRobotClient(user="test_user", password="test_pass")
+
+        # Mock the internal methods that set_vswitch_batch calls
+        with patch.object(client, 'get_vswitches') as mock_get_vswitches, \
+             patch.object(client, 'get_vswitch_details') as mock_get_details, \
+             patch.object(client, 'assign_server_to_vswitch') as mock_assign:
+
+            mock_get_vswitches.return_value = [
+                {
+                    "id": 123,
+                    "vlan": 4077,
+                    "cancelled": False,
+                    "name": "existing-vswitch"
+                }
+            ]
+            mock_get_details.return_value = {
+                "server": [
+                    {"server_number": 321, "status": "ready"},
+                    {"server_number": 322, "status": "ready"},
+                    {"server_number": 323, "status": "ready"}
+                ]
+            }
+
+            server_data = [
+                ("host1", 321, "94.130.9.179"),
+                ("host2", 322, "94.130.9.180"),
+                ("host3", 323, "94.130.9.181")
+            ]
+
+            result = client.set_vswitch_batch(server_data, 4077)
+
+            assert result == (3, 3)  # (success_count, total_count)
+            # Should not call assign_server_to_vswitch since all are already assigned
+            mock_assign.assert_not_called()
+
+    @patch('time.sleep')
     def test_check_vswitch_servers_ready_all_ready(self, mock_sleep, mock_robot_client):
         """Test checking vSwitch servers when all are ready."""
         # Mock vSwitch details with all servers ready

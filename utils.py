@@ -182,8 +182,8 @@ class HetznerRobotClient:
         print(f"Timeout waiting for servers to finish processing in vswitch {vswitch_number} after {max_wait_time} seconds", file=sys.stderr)
         return False
 
-    def set_vswitch(self, server_number, vlan, server_ip):
-        """Configure vswitch for a given server number."""
+    def _find_or_create_vswitch(self, vlan):
+        """Find existing vswitch or create new one for the given VLAN."""
         vswitches = self.get_vswitches()
         if vswitches is None:
             return None
@@ -208,6 +208,14 @@ class HetznerRobotClient:
                 print("Failed to get vswitch number from existing vswitch", file=sys.stderr)
                 return None
             print(f"Found existing vswitch with vlan {vlan}: {existing_vswitch.get('name', 'unnamed')} (ID: {vswitch_number})")
+
+        return vswitch_number
+
+    def set_vswitch(self, server_number, vlan, server_ip):
+        """Configure vswitch for a given server number."""
+        vswitch_number = self._find_or_create_vswitch(vlan)
+        if vswitch_number is None:
+            return None
 
         vswitch_details = self.get_vswitch_details(vswitch_number)
         if vswitch_details is None:
@@ -235,6 +243,60 @@ class HetznerRobotClient:
         print("Waiting for vswitch assignment to be processed...")
         time.sleep(30)
         return (True, True)
+
+    def set_vswitch_batch(self, server_data, vlan):
+        """Configure vswitch for multiple servers in a batch operation.
+
+        Args:
+            server_data: List of tuples (host_name, server_number, server_ip)
+            vlan: VLAN number for the vswitch
+
+        Returns:
+            Tuple of (success_count, total_count) or None on error
+        """
+        vswitch_number = self._find_or_create_vswitch(vlan)
+        if vswitch_number is None:
+            return None
+
+        # Get current vswitch details to check existing assignments
+        vswitch_details = self.get_vswitch_details(vswitch_number)
+        if vswitch_details is None:
+            return None
+
+        # Check which servers are already assigned
+        servers = vswitch_details.get("server", [])
+        assigned_server_numbers = {s.get("server_number") for s in servers if isinstance(s, dict)}
+
+        # Filter out already assigned servers
+        unassigned_servers = [(host, server_num, ip) for host, server_num, ip in server_data
+                             if server_num not in assigned_server_numbers]
+
+        if not unassigned_servers:
+            print("All servers are already assigned to the vswitch")
+            return (len(server_data), len(server_data))
+
+        # Check if vswitch is ready for new assignments
+        print(f"Checking if all servers in vswitch {vswitch_number} are ready before batch assignment...")
+        if not self.check_vswitch_servers_ready(vswitch_number):
+            print(f"Cannot assign servers to vswitch {vswitch_number}: not all servers are ready", file=sys.stderr)
+            return None
+
+        # Prepare batch assignment
+        unassigned_ips = [ip for _, _, ip in unassigned_servers]
+        unassigned_hosts = [host for host, _, _ in unassigned_servers]
+
+        print(f"Batch assigning {len(unassigned_ips)} servers to vswitch {vswitch_number}: {', '.join(unassigned_hosts)}")
+
+        # Perform batch assignment
+        assign_result = self.assign_server_to_vswitch(vswitch_number, unassigned_ips)
+        if assign_result is None:
+            return None
+
+        print(f"Successfully batch assigned {len(unassigned_ips)} servers to vswitch {vswitch_number}")
+        print("Waiting for vswitch assignment to be processed...")
+        time.sleep(30)
+
+        return (len(unassigned_ips), len(server_data))
 
     def get_firewall(self, server_number):
         """Get firewall configuration for a server."""
@@ -650,69 +712,13 @@ def command_set_vswitch_all(args):
         print("No valid server data found", file=sys.stderr)
         return 1
 
-    # Find or create vswitch (reuse logic from set_vswitch)
-    vswitches = client.get_vswitches()
-    if vswitches is None:
+    # Use the new batch method
+    result = client.set_vswitch_batch(server_data, vlan)
+    if result is None:
         return 1
 
-    existing_vswitch = next((v for v in vswitches if isinstance(v, dict) and
-                            v.get("vlan") == vlan and v.get("cancelled") is False), None)
-
-    if existing_vswitch is None:
-        vswitch_name = f"k3s-cluster-{vlan}"
-        result = client.create_vswitch(vlan, vswitch_name)
-        if result is None:
-            return 1
-        vswitch_number = result.get("id")
-        if vswitch_number is None:
-            print("Failed to get vswitch number from creation response", file=sys.stderr)
-            return 1
-        print(f"Created new vswitch '{vswitch_name}' with vlan {vlan} (ID: {vswitch_number})")
-    else:
-        vswitch_number = existing_vswitch.get("id")
-        if vswitch_number is None:
-            print("Failed to get vswitch number from existing vswitch", file=sys.stderr)
-            return 1
-        print(f"Found existing vswitch with vlan {vlan}: {existing_vswitch.get('name', 'unnamed')} (ID: {vswitch_number})")
-
-    # Get current vswitch details to check existing assignments
-    vswitch_details = client.get_vswitch_details(vswitch_number)
-    if vswitch_details is None:
-        return 1
-
-    # Check which servers are already assigned
-    servers = vswitch_details.get("server", [])
-    assigned_server_numbers = {s.get("server_number") for s in servers if isinstance(s, dict)}
-
-    # Filter out already assigned servers
-    unassigned_servers = [(host, server_num, ip) for host, server_num, ip in server_data
-                         if server_num not in assigned_server_numbers]
-
-    if not unassigned_servers:
-        print("All servers are already assigned to the vswitch")
-        return 0
-
-    # Check if vswitch is ready for new assignments
-    print(f"Checking if all servers in vswitch {vswitch_number} are ready before batch assignment...")
-    if not client.check_vswitch_servers_ready(vswitch_number):
-        print(f"Cannot assign servers to vswitch {vswitch_number}: not all servers are ready", file=sys.stderr)
-        return 1
-
-    # Prepare batch assignment
-    unassigned_ips = [ip for _, _, ip in unassigned_servers]
-    unassigned_hosts = [host for host, _, _ in unassigned_servers]
-
-    print(f"Batch assigning {len(unassigned_ips)} servers to vswitch {vswitch_number}: {', '.join(unassigned_hosts)}")
-
-    # Perform batch assignment
-    assign_result = client.assign_server_to_vswitch(vswitch_number, unassigned_ips)
-    if assign_result is None:
-        return 1
-
-    print(f"Successfully batch assigned {len(unassigned_ips)} servers to vswitch {vswitch_number}")
-    print("Waiting for vswitch assignment to be processed...")
-    time.sleep(30)
-
+    success_count, total_count = result
+    print(f"Batch vswitch assignment completed: {success_count}/{total_count} servers processed")
     return 0
 
 
