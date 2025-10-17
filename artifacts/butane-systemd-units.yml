@@ -100,25 +100,6 @@ systemd:
 
         [Install]
         WantedBy=multi-user.target
-    - name: "k3s-custom-manifests.service"
-      enabled: true
-      contents: |
-        [Unit]
-        Description=Custom K3S manifests
-        After=network-online.target
-        ConditionPathExists=!/var/lib/%N.stamp
-
-        [Service]
-        Type=oneshot
-        Environment=KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-        ExecStart=/usr/local/bin/kubectl apply -f /var/tmp_manifests
-        ExecStart=rm -rf /var/tmp_manifests
-        Restart=on-failure
-        RestartSec=5s
-        ExecStartPost=/usr/sbin/touch /var/lib/%N.stamp
-
-        [Install]
-        WantedBy=multi-user.target
     - name: "host-firewall.service"
       enabled: true
       contents: |

@@ -221,7 +221,6 @@
               - librust-curl+openssl-sys-dev
               - libzstd-dev
               - openssl
-              - jq
               - python3-ruamel.yaml
             state: present
             install_recommends: no
@@ -253,6 +252,13 @@
             path: "{{ butane_temp_dir }}/butane-luks.yml"
             state: absent
           when: tang_url is not defined or tang_url == ""
+          tags: [butane]
+
+        - name: Remove K3S custom resources when not first_master
+          file:
+            path: "{{ butane_temp_dir }}/butane-k3s-custom-resources.yml"
+            state: absent
+          when: "inventory_hostname != first_master"
           tags: [butane]
 
         - name: Merge butane fragments
@@ -357,13 +363,6 @@
         - name: Compile butane.yml file
           ansible.builtin.command: butane {{ butane }} -o {{ ignition }}
           ignore_errors: false
-          tags: [butane]
-
-        - name: Remove K3S Cloudflare configuration
-          shell: |
-            jq -c '.storage.files = [.storage.files[] | select(.path != "/var/tmp_manifests/cf.yml")]' {{ ignition }} > {{ ignition }}_new
-            mv {{ ignition }}_new {{ ignition }}
-          when: "inventory_hostname != first_master"
           tags: [butane]
 
     - name: Install Fedora CoreOS and reboot
