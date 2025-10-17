@@ -1,63 +1,8 @@
 storage:
   directories:
-    - path: /var/tmp_manifests
-      overwrite: true
     - path: /var/lib/rancher/k3s/server/manifests
       overwrite: true
   files:
-    - path: /var/tmp_manifests/dummmy.yml
-      mode: 0644
-      contents:
-        inline: |
-          apiVersion: v1
-          kind: ConfigMap
-          metadata:
-            name: dummy
-          data:
-            msg: Hello world
-    - path: /var/tmp_manifests/cf.yml
-      mode: 0644
-      contents:
-        inline: |
-          apiVersion: v1
-          kind: Secret
-          metadata:
-            name: traefik-tls-secret
-            namespace: kube-system
-          type: kubernetes.io/tls
-          data:
-            tls.crt: !!CF_ORIGIN_CERT!!
-            tls.key: !!CF_ORIGIN_CERT_KEY!!
-          ---
-          apiVersion: traefik.io/v1alpha1
-          kind: TLSStore
-          metadata:
-            name: default
-            namespace: kube-system
-          spec:
-            defaultCertificate:
-              secretName: traefik-tls-secret
-          ---
-          apiVersion: v1
-          kind: Secret
-          metadata:
-            name: cloudflare-ca
-            namespace: kube-system
-          type: Opaque
-          data:
-            ca.crt: !!CF_ORIGIN_CA!!
-          ---
-          apiVersion: traefik.io/v1alpha1
-          kind: TLSOption
-          metadata:
-            name: default
-            namespace: kube-system
-          spec:
-            clientAuth:
-              clientAuthType: RequireAndVerifyClientCert
-              secretNames:
-                - cloudflare-ca
-            minVersion: VersionTLS13
     - path: /var/lib/rancher/k3s/server/manifests/hetzner-traefik.yml
       mode: 0644
       contents:

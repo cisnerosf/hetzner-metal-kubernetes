@@ -1,0 +1,79 @@
+systemd:
+  units:
+    - name: "k3s-custom-resources.service"
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Custom K3S resources
+        After=network-online.target
+        ConditionPathExists=!/var/lib/%N.stamp
+
+        [Service]
+        Type=oneshot
+        Environment=KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+        ExecStart=/usr/local/bin/kubectl apply -f /var/tmp_resources
+        ExecStart=rm -rf /var/tmp_resources
+        Restart=on-failure
+        RestartSec=5s
+        ExecStartPost=/usr/sbin/touch /var/lib/%N.stamp
+
+        [Install]
+        WantedBy=multi-user.target
+storage:
+  directories:
+    - path: /var/tmp_resources
+      overwrite: true
+  files:
+    - path: /var/tmp_resources/dummmy.yml
+      mode: 0644
+      contents:
+        inline: |
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: dummy
+          data:
+            msg: Hello world
+    - path: /var/tmp_resources/cf.yml
+      mode: 0644
+      contents:
+        inline: |
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: traefik-tls-secret
+            namespace: kube-system
+          type: kubernetes.io/tls
+          data:
+            tls.crt: !!CF_ORIGIN_CERT!!
+            tls.key: !!CF_ORIGIN_CERT_KEY!!
+          ---
+          apiVersion: traefik.io/v1alpha1
+          kind: TLSStore
+          metadata:
+            name: default
+            namespace: kube-system
+          spec:
+            defaultCertificate:
+              secretName: traefik-tls-secret
+          ---
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: cloudflare-ca
+            namespace: kube-system
+          type: Opaque
+          data:
+            ca.crt: !!CF_ORIGIN_CA!!
+          ---
+          apiVersion: traefik.io/v1alpha1
+          kind: TLSOption
+          metadata:
+            name: default
+            namespace: kube-system
+          spec:
+            clientAuth:
+              clientAuthType: RequireAndVerifyClientCert
+              secretNames:
+                - cloudflare-ca
+            minVersion: VersionTLS13
