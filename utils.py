@@ -66,6 +66,7 @@ class HetznerRobotClient:
         self.user = user or os.environ.get("ROBOT_WEBSERVICE_USER")
         self.password = password or os.environ.get("ROBOT_WEBSERVICE_PASS")
         self.api_base = api_base
+        self._server_list_cache = None  # Cache for /server response
 
     def has_credentials(self):
         return bool(self.user and self.password)
@@ -87,7 +88,11 @@ class HetznerRobotClient:
             print("ROBOT_WEBSERVICE_USER and ROBOT_WEBSERVICE_PASS must be set", file=sys.stderr)
             return None
 
-        data = self._request("/server")
+        # Use cache if available, otherwise fetch from API
+        if self._server_list_cache is None:
+            self._server_list_cache = self._request("/server")
+
+        data = self._server_list_cache
         if not isinstance(data, list):
             print("Unexpected API response format", file=sys.stderr)
             return None
