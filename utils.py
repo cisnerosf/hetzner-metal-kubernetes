@@ -129,8 +129,22 @@ class HetznerRobotClient:
     def get_vswitch_details(self, vswitch_number):
         return self._request(f"/vswitch/{vswitch_number}")
 
-    def assign_server_to_vswitch(self, vswitch_number, server_ip):
-        payload = {"server[]": server_ip}
+    def assign_server_to_vswitch(self, vswitch_number, server_ips):
+        """Assign one or more servers to a vswitch.
+
+        Args:
+            vswitch_number: The vswitch ID to assign servers to
+            server_ips: Either a single IP string or a list of IP strings
+        """
+        # Handle both single IP and list of IPs for backward compatibility
+        if isinstance(server_ips, str):
+            server_ips = [server_ips]
+
+        # Build payload with multiple server[] entries
+        payload = {}
+        for i, ip in enumerate(server_ips):
+            payload[f"server[{i}]"] = ip
+
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         url = f"{self.api_base}/vswitch/{vswitch_number}/server"
         try:
@@ -234,21 +248,21 @@ class HetznerRobotClient:
     def wait_for_firewall_ready(self, server_number, max_wait_time=300, check_interval=5):
         """Wait for firewall status to not be 'in process'."""
         start_time = time.time()
-        
+
         while time.time() - start_time < max_wait_time:
             firewall_data = self.get_firewall(server_number)
             if firewall_data is None:
                 print(f"Failed to get firewall status for server {server_number}", file=sys.stderr)
                 return False
-            
+
             firewall_status = firewall_data.get("firewall", {}).get("status")
             if firewall_status != "in process":
                 print(f"Firewall status is now: {firewall_status}")
                 return True
-            
+
             print(f"Firewall is still in process, waiting... (status: {firewall_status})")
             time.sleep(check_interval)
-        
+
         print(f"Timeout waiting for firewall to be ready after {max_wait_time} seconds", file=sys.stderr)
         return False
 
@@ -476,13 +490,13 @@ def command_firewall(args):
 
     # Build form-urlencoded data for firewall configuration
     firewall_data = []
-    
+
     # Basic firewall settings
     firewall_data.append(("status", "active"))
     firewall_data.append(("filter_ipv6", "true"))
     firewall_data.append(("whitelist_hos", "true"))
     firewall_data.append(("port", "main"))
-    
+
     # Input rules
     input_rules = [
         {
@@ -534,12 +548,12 @@ def command_firewall(args):
             "action": "accept"
         }
     ]
-    
+
     # Add input rules to form data
     for i, rule in enumerate(input_rules):
         for key, value in rule.items():
             firewall_data.append((f"rules[input][{i}][{key}]", str(value)))
-    
+
     # Output rules
     output_rules = [
         {
@@ -547,12 +561,12 @@ def command_firewall(args):
             "action": "accept"
         }
     ]
-    
+
     # Add output rules to form data
     for i, rule in enumerate(output_rules):
         for key, value in rule.items():
             firewall_data.append((f"rules[output][{i}][{key}]", str(value)))
-    
+
     # Convert to form-urlencoded string
     form_data = urllib.parse.urlencode(firewall_data)
 
@@ -604,7 +618,102 @@ def command_rescue_all(args):
 
 
 def command_set_vswitch_all(args):
-    return _run_command_on_all_hosts(command_vswitch, "set vswitch", args.client)
+    """Configure vswitch for all hosts in inventory using batch assignment."""
+    client = args.client
+    inventory_path = Path.cwd() / "inventory.yml"
+    hosts, vlan = _load_inventory(inventory_path)
+
+    if not hosts:
+        print("No hosts found in inventory.yml")
+        return 0
+
+    if vlan is None:
+        print("vlan not found in inventory.yml under hetzner_k3s_metal.vars", file=sys.stderr)
+        return 1
+
+    # Get all server numbers and IPs
+    server_data = []
+    for host_name in hosts.keys():
+        server_number = _get_server_number_for_host(client, host_name)
+        if server_number is None:
+            print(f"Failed to get server number for {host_name}", file=sys.stderr)
+            continue
+
+        server_ip = get_host_ip_from_inventory(inventory_path, host_name)
+        if server_ip is None:
+            print(f"Failed to get IP for {host_name}", file=sys.stderr)
+            continue
+
+        server_data.append((host_name, server_number, server_ip))
+
+    if not server_data:
+        print("No valid server data found", file=sys.stderr)
+        return 1
+
+    # Find or create vswitch (reuse logic from set_vswitch)
+    vswitches = client.get_vswitches()
+    if vswitches is None:
+        return 1
+
+    existing_vswitch = next((v for v in vswitches if isinstance(v, dict) and
+                            v.get("vlan") == vlan and v.get("cancelled") is False), None)
+
+    if existing_vswitch is None:
+        vswitch_name = f"k3s-cluster-{vlan}"
+        result = client.create_vswitch(vlan, vswitch_name)
+        if result is None:
+            return 1
+        vswitch_number = result.get("id")
+        if vswitch_number is None:
+            print("Failed to get vswitch number from creation response", file=sys.stderr)
+            return 1
+        print(f"Created new vswitch '{vswitch_name}' with vlan {vlan} (ID: {vswitch_number})")
+    else:
+        vswitch_number = existing_vswitch.get("id")
+        if vswitch_number is None:
+            print("Failed to get vswitch number from existing vswitch", file=sys.stderr)
+            return 1
+        print(f"Found existing vswitch with vlan {vlan}: {existing_vswitch.get('name', 'unnamed')} (ID: {vswitch_number})")
+
+    # Get current vswitch details to check existing assignments
+    vswitch_details = client.get_vswitch_details(vswitch_number)
+    if vswitch_details is None:
+        return 1
+
+    # Check which servers are already assigned
+    servers = vswitch_details.get("server", [])
+    assigned_server_numbers = {s.get("server_number") for s in servers if isinstance(s, dict)}
+
+    # Filter out already assigned servers
+    unassigned_servers = [(host, server_num, ip) for host, server_num, ip in server_data
+                         if server_num not in assigned_server_numbers]
+
+    if not unassigned_servers:
+        print("All servers are already assigned to the vswitch")
+        return 0
+
+    # Check if vswitch is ready for new assignments
+    print(f"Checking if all servers in vswitch {vswitch_number} are ready before batch assignment...")
+    if not client.check_vswitch_servers_ready(vswitch_number):
+        print(f"Cannot assign servers to vswitch {vswitch_number}: not all servers are ready", file=sys.stderr)
+        return 1
+
+    # Prepare batch assignment
+    unassigned_ips = [ip for _, _, ip in unassigned_servers]
+    unassigned_hosts = [host for host, _, _ in unassigned_servers]
+
+    print(f"Batch assigning {len(unassigned_ips)} servers to vswitch {vswitch_number}: {', '.join(unassigned_hosts)}")
+
+    # Perform batch assignment
+    assign_result = client.assign_server_to_vswitch(vswitch_number, unassigned_ips)
+    if assign_result is None:
+        return 1
+
+    print(f"Successfully batch assigned {len(unassigned_ips)} servers to vswitch {vswitch_number}")
+    print("Waiting for vswitch assignment to be processed...")
+    time.sleep(30)
+
+    return 0
 
 
 def _run_provision_steps(steps, operation_name):

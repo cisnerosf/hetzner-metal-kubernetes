@@ -120,6 +120,65 @@ class TestIntegration:
         # The set_vswitch method should have been called, which internally calls get_vswitches
         mock_client.set_vswitch.assert_called_once_with(321, 4077, "94.130.9.179")
 
+    def test_set_vswitch_all_batch_integration(self, temp_dir, mock_hetzner_api_responses):
+        """Test batch vswitch assignment for all hosts integration."""
+        # Create test inventory with multiple hosts
+        inventory_data = {
+            "hetzner_k3s_metal": {
+                "hosts": {
+                    "test-server-1": {
+                        "ansible_host": "94.130.9.179",
+                        "ansible_password": "test-pass-1"
+                    },
+                    "test-server-2": {
+                        "ansible_host": "94.130.9.180",
+                        "ansible_password": "test-pass-2"
+                    },
+                    "test-server-3": {
+                        "ansible_host": "94.130.9.181",
+                        "ansible_password": "test-pass-3"
+                    }
+                },
+                "vars": {
+                    "vlan": 4077
+                }
+            }
+        }
+
+        inventory_path = temp_dir / "inventory.yml"
+        with open(inventory_path, 'w') as f:
+            yaml.dump(inventory_data, f)
+
+        with patch('utils.HetznerRobotClient') as mock_client_class:
+            mock_client = mock_client_class.return_value
+
+            # Mock server number lookups
+            mock_client.find_server_number_by_ip.side_effect = [321, 322, 323]
+
+            # Mock vswitch operations
+            mock_client.get_vswitches.return_value = [
+                {
+                    "id": 123,
+                    "vlan": 4077,
+                    "cancelled": False,
+                    "name": "existing-vswitch"
+                }
+            ]
+            mock_client.get_vswitch_details.return_value = {
+                "server": []  # No servers assigned yet
+            }
+            mock_client.check_vswitch_servers_ready.return_value = True
+            mock_client.assign_server_to_vswitch.return_value = {"success": True}
+
+            # Change to test directory
+            with patch('utils.Path.cwd', return_value=temp_dir):
+                with patch('time.sleep'):  # Skip sleep in tests
+                    result = main(["set_vswitch_all"])
+
+        assert result == 0
+        # Verify that assign_server_to_vswitch was called once with all three IPs
+        mock_client.assign_server_to_vswitch.assert_called_once_with(123, ["94.130.9.179", "94.130.9.180", "94.130.9.181"])
+
     def test_provision_workflow_integration(self, temp_dir, mock_hetzner_api_responses):
         """Test complete provision workflow integration."""
         # Create test inventory
