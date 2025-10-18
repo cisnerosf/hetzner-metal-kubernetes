@@ -27,6 +27,7 @@ This is an **MVP** that demonstrates the core concepts. We welcome contributions
 - [Troubleshooting](#troubleshooting)
   - [Cannot boot server in Rescue Mode after installing Fedora CoreOS](#cannot-boot-server-in-rescue-mode-after-installing-fedora-coreos)
   - [Server fails to connect to another server over VLAN IP](#server-fails-to-connect-to-another-server-over-vlan-ip)
+- [On-premises setup](#on-premises-setup)
 
 # Overview
 
@@ -240,3 +241,12 @@ pytest --cov=utils --cov-report=html --cov-report=term-missing
 3. Check the server assignments for your vSwitch:
    - If the problematic server is missing from the vSwitch, add it using: `./utils.py set_vswitch <hostname>`
 4. Check if the server is assigned to other vSwitches, remove it from the incorrect vSwitch(s) in the dashboard
+
+
+## On-premises setup
+
+If you're deploying an on‑prem Kubernetes cluster on private cloud infrastructure, automating OS installation across nodes accelerates setup and reduces human error. PXE provisioning is a widely used, reliable approach: a DHCP/TFTP service provides network boot files so machines can boot via the network and perform unattended OS installs.
+
+Canonical’s MAAS (Metal-as-a-Service) is a full-featured open-source platform that provides DHCP, TFTP, PXE orchestration, image management, and hardware discovery to provision and manage bare-metal servers at scale.
+
+[MAAS](https://canonical.com/maas/docs) provides functionality analogous to [Hetzner’s Rescue System](https://docs.hetzner.com/robot/dedicated-server/troubleshooting/hetzner-rescue-system/).
