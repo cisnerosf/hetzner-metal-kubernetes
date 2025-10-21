@@ -213,6 +213,7 @@ pytest --cov=utils --cov-report=html --cov-report=term-missing
 - See systemd service logs for current boot: `sudo journalctl -u service-name.service -r -n 100 -b`
 - Install packages: `sudo rpm-ostree install --apply-live --allow-inactive --assumeyes tcpdump`
 - Check NVMe health: `sudo rpm-ostree install --apply-live --allow-inactive --assumeyes smartmontools && sudo smartctl -x /dev/nvme1n1`
+- Check RAID sync progress: `sudo cat /proc/mdstat`
 
 ## Troubleshooting
 
