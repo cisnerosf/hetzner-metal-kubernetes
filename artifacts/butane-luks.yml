@@ -3,3 +3,14 @@ boot_device:
     tang:
       - url: "!!TANG_URL!!"
         thumbprint: "!!TANG_THUMBPRINT!!"
+storage:
+    luks:
+      - name: root
+        device: /dev/md/md-root
+        label: luks-root
+        wipe_volume: true
+        open_options: ["--perf-no_read_workqueue", "--perf-no_write_workqueue"]
+        clevis:
+          tang:
+            - url: "!!TANG_URL!!"
+              thumbprint: "!!TANG_THUMBPRINT!!"
