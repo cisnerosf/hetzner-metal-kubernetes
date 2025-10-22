@@ -77,13 +77,6 @@ storage:
           gpgcheck=1
           repo_gpgcheck=0
           gpgkey=https://rpm.rancher.io/public.key
-    - path: /usr/local/bin/k3s
-      overwrite: true
-      mode: 0755
-      contents:
-        source: "https://github.com/k3s-io/k3s/releases/download/v1.33.5%2Bk3s1/k3s"
-        verification:
-          hash: "sha256-ba2bc6892347d5ddf7d9a1f50b4d6fe73c6c325eb16894aa95993ac143096725"
     - path: /etc/rancher/k3s/kubelet.config
       mode: 0644
       contents:

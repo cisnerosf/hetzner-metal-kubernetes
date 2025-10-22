@@ -174,10 +174,15 @@
       block:
         - name: Download Butane
           get_url:
-            url: "https://github.com/coreos/butane/releases/download/v0.25.1/butane-x86_64-unknown-linux-gnu"
+            url: "https://github.com/coreos/butane/releases/download/v0.25.1/butane-{{ ansible_architecture }}-unknown-linux-gnu"
             dest: /usr/local/bin/butane
             mode: '0755'
-            checksum: "sha256:c9bf44bed655215384fca24c3ebf2b547965d9c522cf959e735201c5f97ea467"
+            checksum: >-
+              {%- if ansible_architecture == "x86_64" -%}
+              sha256:c9bf44bed655215384fca24c3ebf2b547965d9c522cf959e735201c5f97ea467
+              {%- else -%}
+              sha256:9e6811720ced6a3655ba16d9cd933f768d04e412de47accaecd1e584bb5bc79e
+              {%- endif -%}
           tags: [tools, butane]
 
         - name: Check if cargo is installed
@@ -252,6 +257,13 @@
             path: "{{ butane_temp_dir }}/butane-luks.yml"
             state: absent
           when: tang_url is not defined or tang_url == ""
+          tags: [butane]
+
+        - name: Remove incompatible architecture fragment
+          file:
+            path: >-
+              {{ butane_temp_dir }}/butane-{%- if ansible_architecture == "x86_64" -%}aarch64.yml{%- else -%}x86_64.yml{%- endif -%}
+            state: absent
           tags: [butane]
 
         - name: Remove K3S custom resources when not first_master

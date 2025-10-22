@@ -138,7 +138,7 @@ storage:
                 serviceAccountName: fleetlock
                 containers:
                   - name: fleetlock
-                    image: quay.io/poseidon/fleetlock:v0.4.0-218-g2c42884-amd64
+                    image: quay.io/poseidon/fleetlock:v0.4.0-218-g2c42884
                     env:
                       - name: NAMESPACE
                         value: "kube-system"

@@ -1,0 +1,5 @@
+version: 2
+secret:
+  ignored_paths:
+    - e2e-ssh.key
+    - e2e-inventory.yml

@@ -28,6 +28,7 @@ This is an **MVP** that demonstrates the core concepts. We welcome contributions
   - [Cannot boot server in Rescue Mode after installing Fedora CoreOS](#cannot-boot-server-in-rescue-mode-after-installing-fedora-coreos)
   - [Server fails to connect to another server over VLAN IP](#server-fails-to-connect-to-another-server-over-vlan-ip)
 - [On-premises setup](#on-premises-setup)
+- [E2E tests using Vagrant](#e2e-tests-using-vagrant)
 
 # Overview
 
@@ -251,3 +252,29 @@ If you're deploying an on‑prem Kubernetes cluster on private cloud infrastruct
 Canonical’s MAAS (Metal-as-a-Service) is a full-featured open-source platform that provides DHCP, TFTP, PXE orchestration, image management, and hardware discovery to provision and manage bare-metal servers at scale.
 
 [MAAS](https://canonical.com/maas/docs) provides functionality analogous to [Hetzner’s Rescue System](https://docs.hetzner.com/robot/dedicated-server/troubleshooting/hetzner-rescue-system/).
+
+## E2E tests using Vagrant
+
+### Install dependencies (macOS)
+```bash
+brew tap hashicorp/tap
+brew install hashicorp/tap/hashicorp-vagrant qemu socat
+vagrant plugin install vagrant-qemu
+```
+
+### Run
+1. Start VM: `vagrant up`
+2. Run playbook: `ansible-playbook -i e2e-inventory.yml ./playbooks/k3s_metal.yml`
+3. Connect to serial console: `socat - UNIX-CONNECT:$HOME/.vagrant.d/tmp/vagrant-qemu/$(cat .vagrant/machines/default/qemu/id)/qemu_socket_serial`
+4.  If CoreOS boots into emergency shell mode (`:/root#`) with the error:
+    ```
+    Ignition has failed. Please ensure your config is valid.
+    ....
+    Oct 21 22:54:04 ignition-ostree-transposefs[1076]: cat: /dev/disk/by-partlabel/BIOS-BOOT: No such file or directory
+    Oct 21 22:54:04 systemd[1]: ignition-ostree-transposefs-save.service: Main process exited, code=exited, status=1/FAILURE
+    Oct 21 22:54:04 systemd[1]: ignition-ostree-transposefs-save.service: Failed with result 'exit-code'.
+    ...
+    ```
+    Run `(sgdisk --change-name=1:"BIOS-BOOT" /dev/nvme0n1 || sgdisk --change-name=1:"BIOS-BOOT" /dev/nvme1n1) && reboot`
+5. Use `chmod 600 e2e-ssh.key && ssh -p 4449 -i e2e-ssh.key -o UserKnownHostsFile=/dev/null coreuser@127.0.0.1` to SSH into CoreOS
+6. Destroy the VM: `vagrant destroy`
