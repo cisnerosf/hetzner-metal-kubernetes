@@ -53,6 +53,9 @@ jobs:
         chmod +x /tmp/butane
         echo "Downloaded Butane v0.25.1"
 
+    - name: Remove incompatible architecture fragment
+      run: rm $GITHUB_WORKSPACE/artifacts/butane-aarch64.yml
+
     - name: Merge butane fragments
       run: |
         echo "Merging butane fragments..."
