@@ -111,3 +111,10 @@ storage:
 
           # Login and secure logs (optional)
           -w /var/log/secure -p wa -k logins
+    - path: /usr/local/bin/k3s
+      overwrite: true
+      mode: 0755
+      contents:
+        source: "https://github.com/k3s-io/k3s/releases/download/v1.33.5%2Bk3s1/k3s"
+        verification:
+          hash: "sha256-ba2bc6892347d5ddf7d9a1f50b4d6fe73c6c325eb16894aa95993ac143096725"

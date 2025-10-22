@@ -1,0 +1,69 @@
+hetzner_k3s_metal:
+  hosts:
+    vagrant:
+      ansible_host: 127.0.0.1
+      ansible_user: root
+      ansible_password: root
+      ansible_port: 2222
+      ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+      setup: master
+      vlan_ip: 10.100.100.1
+  vars:
+    tang_url: ""
+    tang_thumbprint: ""
+    vlan: 4060
+    k3s_token: dE6OVAVnL7xdcPYae2Te6lx1uGZbzE6gO5yZsNga2zT7NBNXGjWQcEIHCPlLI2uQKai8FWfIttdY80YsygcOP3ciaCQoP4mKBLr5
+    first_master: vagrant
+    ssh_authorized_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKESJ29SwWCJPkGRlqFiN0Pt7LbOQwhmnEyXpghj1wAE test@example.com"
+    cf_origin_cert: |-
+        -----BEGIN CERTIFICATE-----
+        MIIDqTCCApGgAwIBAgIUa1ekRptbZJsX699zaq9FcxLcdvAwDQYJKoZIhvcNAQEL
+        BQAwZDELMAkGA1UEBhMCVVMxCzAJBgNVBAgMAkNBMRYwFAYDVQQHDA1TYW4gRnJh
+        bmNpc2NvMRUwEwYDVQQKDAxUZXN0IENvbXBhbnkxGTAXBgNVBAMMEHRlc3QuZXhh
+        bXBsZS5jb20wHhcNMjUxMDE4MTU0ODMwWhcNMjYxMDE4MTU0ODMwWjBkMQswCQYD
+        VQQGEwJVUzELMAkGA1UECAwCQ0ExFjAUBgNVBAcMDVNhbiBGcmFuY2lzY28xFTAT
+        BgNVBAoMDFRlc3QgQ29tcGFueTEZMBcGA1UEAwwQdGVzdC5leGFtcGxlLmNvbTCC
+        ASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAMQFvi5SNGPnaI8fJ556tUP3
+        c1hoaN+/FsmQO0OntX9ZKbYIwnh9zCStdF14TkpMS9ClT6ZVu0gXdh/0knJv8HJr
+        yMtmxC6qbRdBDQHchU/Uqhj7iUr+3K7y6hBaPazCdW6EBSCxJO1f7UrHomsIjIOT
+        RAYC92IBTWv0c7/j+OTSV6pgpkR0Ou5iHovWTQDDmYR37hc5oJTdQfQ0JCXN6OZa
+        20Zmfk2eRZNWnErTJcC7stTS+i9DOpzPhIr4VMTDUYn+Zla10vlEZoWyiAA6ItS3
+        19w/GPCXV9gvzIegQNrqD3FO0UbSkcpOZyTU1FklHt1I3dl8jehV3m5W7e1QfP0C
+        AwEAAaNTMFEwHQYDVR0OBBYEFP6ulHU7sr3zwAgFJ5357ChIaTgpMB8GA1UdIwQY
+        MBaAFP6ulHU7sr3zwAgFJ5357ChIaTgpMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZI
+        hvcNAQELBQADggEBACoX3tBTonzLh25QSsyJeOc1xNXRnddiDZyrRX+pYqbf4Msb
+        KHYK+hWOjuEia6HMoIknfGLkv/eQGz2OfR3NZ9tES8YCZyHXVqrMUdR0+AVkvkBa
+        KPHKgZmlK82CYlorH/cCFNbw9d/emUUXkrl7QV9XeMBCpXBJqOnOXfAAcxoR4scb
+        lfKV+TcKRGzEam/dneUf+WuPHbJJHvUwMf3u9oggpOOLPKXsuGw8Viu6qaMVHjvY
+        4tZPyVbStztAn+ypYiu4YejmwbQmyX82S8Nn6EhM/+tiDwdu+RvVVtvPctUUDybu
+        JjRi/dS9KcQANeG9y8m+BnZsq7pykHXq2iQ+VBE=
+        -----END CERTIFICATE-----
+    cf_origin_cert_key: |-
+        -----BEGIN PRIVATE KEY-----
+        MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDEBb4uUjRj52iP
+        HyeeerVD93NYaGjfvxbJkDtDp7V/WSm2CMJ4fcwkrXRdeE5KTEvQpU+mVbtIF3Yf
+        9JJyb/Bya8jLZsQuqm0XQQ0B3IVP1KoY+4lK/tyu8uoQWj2swnVuhAUgsSTtX+1K
+        x6JrCIyDk0QGAvdiAU1r9HO/4/jk0leqYKZEdDruYh6L1k0Aw5mEd+4XOaCU3UH0
+        NCQlzejmWttGZn5NnkWTVpxK0yXAu7LU0vovQzqcz4SK+FTEw1GJ/mZWtdL5RGaF
+        sogAOiLUt9fcPxjwl1fYL8yHoEDa6g9xTtFG0pHKTmck1NRZJR7dSN3ZfI3oVd5u
+        Vu3tUHz9AgMBAAECggEAGHnbw96ULRn4JnrOOyMjnsTMnHA5EXXDoM/Hc/dXxHrR
+        KFTSrNyO+3tvFBFmu9nn/jmjXD0d4UQQsK/HWM5dDc8jPNvsSM698rvhexHafDEt
+        O2kDvR9dVeOop08P9BI55d6f4fOh4pk/lhP0Vfy0yDnAsibNAJScuAtHfWE4CEt6
+        WYX4MCrKMqUv0+/cNR3fFVbpeiVFziOD1Qt4yEtswCSvUhN63jrMrUsX7ZQmo9tu
+        sDbHyY+bwXvh8W9fFzFjpETaNees74/RsLQPy0LIOKBEb9jd1kuIE4HryPg+qVBe
+        A2smdcDiL6XzUF8UXq5bQukjOk8NC7tQ08sToaZIvwKBgQD+JrfymGydMkwQ8OLU
+        z5ltU3EifmnwK7jAcftACNjqxapljznjoMxefDKlptcuV0nMEjuDNotjHJp2g4g8
+        d1S84TSxNyBclTwhXaJNoqxrcjjvzG+J+pHLcFjetWtyT2y4f0H7mPD0Gt1HJ3gh
+        xpWvC38boYEL5t6/PQI+LFM7iwKBgQDFcsbSS2PIQa0vif6eHSau9hqRMDonhrty
+        EtEKKVQVWTiU6bLQKz4gYODSVeseWCCKmqYFpV8AcW/e2TTREUDMAs1E7+Pf+fJH
+        vJiMBC3FCwAt6Ne1EepMlJNMz/fzXS7+s2eRB7Ope8casVM6BzMoI905JpMjsStl
+        0Umb9wzalwKBgC52S5iZDvop8MgEEaPQE/9tirhAngNfKtZbwA/zzhwVaNJKPc4E
+        XnhDgkrQVnRNVtts1d5mAVNsLjzOTQCo3B/vl99x8YObcLO013AT9itqZUhJenai
+        DTdA4a5NQkhShtCvyxNA4YPuyVcxuv+Ju2GV23Xkr5/KZBxX/en51nmDAoGAK3QK
+        C4fp6s2BZr/w2C1EMScaS6+YbNB6+izn8luMFLKxABy6bJPHtWp8r+2Ws/PjHX3R
+        Yda2JKvSWfHlbMlmQD+xmyVMOiOQzXbU/6N/yyiTnobqyf+qV7YvAK2YPOfaCtXC
+        yikuwfLqq5Yw4clp2cCi1AwIP8ei7GJ116w0GPsCgYEAg+Vny2QE918jSznUxJ9x
+        Kl2eyO5WhNhPplSy2H8bY9eiuKZ7+bZhXXDjr8EJKdYueHqUbgE3bIJoN9gq1N9P
+        Rc5mH8VGCteCSnNkBO0oYId04bsgohBz9Qzqt++LbRmT4LQyyRbBD8BoFs5lH1Ur
+        mmTo11pRcdP+xeozzDAAJrM=
+        -----END PRIVATE KEY-----
