@@ -1,12 +1,5 @@
 systemd:
   units:
-    - name: sshd.socket
-      dropins:
-      - name: 10-sshd-port.conf
-        contents: |
-          [Socket]
-          ListenStream=
-          ListenStream=4449
     - name: "k3s.service"
       enabled: true
       contents: |
@@ -75,25 +68,6 @@ systemd:
           --allow-inactive \
           --assumeyes \
           k3s-selinux policycoreutils-python-utils
-        ExecStartPost=/usr/sbin/touch /var/lib/%N.stamp
-        Restart=on-failure
-        RestartSec=5s
-
-        [Install]
-        WantedBy=multi-user.target
-    - name: custom-selinux-rules.service
-      enabled: true
-      contents: |
-        [Unit]
-        Description=Configure custom SELinux rules
-        Requires=rpm-ostree-install-packages.service
-        Before=sshd.service
-        ConditionPathExists=!/var/lib/%N.stamp
-
-        [Service]
-        Type=oneshot
-        RemainAfterExit=yes
-        ExecStart=/usr/sbin/semanage port -a -t ssh_port_t -p tcp 4449
         ExecStartPost=/usr/sbin/touch /var/lib/%N.stamp
         Restart=on-failure
         RestartSec=5s

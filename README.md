@@ -18,6 +18,7 @@ This is an **MVP** that demonstrates the core concepts. We welcome contributions
 - [Cluster setup](#cluster-setup)
 - [Single-server setup](#single-server-setup)
 - [Disk encryption](#disk-encryption)
+- [Bastion host](#bastion-host)
 - [utils CLI](#utils-cli)
   - [Setup](#setup)
   - [Commands overview](#commands-overview)
@@ -45,6 +46,7 @@ Automates deploying K3S (single-server or HA) on Hetzner dedicated servers with 
 - **Reboot Coordination**:  [fleetlock](https://github.com/poseidon/fleetlock) reboot coordinator for the nodes in the cluster.
 - **Disk Encryption**: Encrypt disks with LUKS using [Tang](https://github.com/latchset/tang)
 - **CIS Hardening**: based on [K3S CIS Hardening Guide](https://docs.k3s.io/security/hardening-guide) (partial implementation)
+- **Bastion host:** In line with the "secure by default" principle, SSH access to Ansible hosts is restricted to a defined set of IPv4 addresses.
 
 ## Cluster setup
 1. Setup `utils` CLI (see section below) and install Ansible (`brew update; brew install ansible;`)
@@ -85,12 +87,15 @@ hetzner_k3s_metal:
     cf_origin_cert_key: |-
       -----REPLACE ME-----
       G9w0BAQEFAgAwIBAgIUAASCBKcwggSj.....
+    bastion_ips: --REPLACE_ME--
+    ansible_ssh_common_args: --REPLACE_ME--
 ```
-3. Run `./utils.py token` to generate a K3S token, then update `k3s_token`.
-4. Run `./utils.py provision_all` to provision all servers, then set each host’s `ansible_password` to its rescue password.
-5. Set `first_master` to the host name of the 1st K3S master node in the cluster.
-6. Enable [Full (strict) mode](https://developers.cloudflare.com/ssl/origin-configuration/ssl-modes/full-strict/) and [Authenticated Origin Pulls (mTLS)](https://developers.cloudflare.com/ssl/origin-configuration/authenticated-origin-pull/) for your domain on your Cloudflare and save the certifcate to `cf_origin_cert` and private key to `cf_origin_cert_key`.
-7. Run `ansible-playbook playbooks/k3s_metal.yml` and wait for the machines to reboot.
+3. Setup a [bastion host](#bastion-host) (see section below), then update `bastion_ips` and `ansible_ssh_common_args`.
+4. Run `./utils.py token` to generate a K3S token, then update `k3s_token`.
+5. Run `./utils.py provision_all` to provision all servers, then set each host’s `ansible_password` to its rescue password.
+6. Set `first_master` to the host name of the 1st K3S master node in the cluster.
+7. Enable [Full (strict) mode](https://developers.cloudflare.com/ssl/origin-configuration/ssl-modes/full-strict/) and [Authenticated Origin Pulls (mTLS)](https://developers.cloudflare.com/ssl/origin-configuration/authenticated-origin-pull/) for your domain on your Cloudflare and save the certifcate to `cf_origin_cert` and private key to `cf_origin_cert_key`.
+8. Run `ansible-playbook playbooks/k3s_metal.yml` and wait for the machines to reboot.
 
 **Note:** If you want to bootstrap only one node within a cluster:
 ```
@@ -122,6 +127,8 @@ hetzner_k3s_metal:
     cf_origin_cert_key: |-
       -----REPLACE ME-----
       G9w0BAQEFAgAwIBAgIUAASCBKcwggSj.....
+    bastion_ips: --REPLACE_ME--
+    ansible_ssh_common_args: --REPLACE_ME--
 ```
 
 ## Disk encryption
@@ -148,6 +155,38 @@ hetzner_k3s_metal:
     vlan: 4060
     ...
 ```
+
+## Bastion host
+In line with the **secure by default** principle, SSH access to Ansible hosts must be limited to a defined set of IPv4 addresses. 
+You may use either your VPN's public IP (if fixed) or a dedicated bastion host — for example, a low-cost Hetzner cloud VM (under €5/month).
+
+1. Set `bastion_ips` to allowed IPv4 networks in CIDR notation (max 3 entries due to Hetzner firewall limits).
+2. If you use a VM as a bastion host, configure Ansible host var `ansible_ssh_common_args` to use SSH's builtin `ProxyCommand` so connections route through the bastion.
+```yaml
+hetzner_k3s_metal:
+  hosts:
+    shadrach:
+      ansible_host: 195.201.160.126
+      ansible_password: --REPLACE_ME--
+      setup: master
+      vlan_ip: 10.100.100.1
+  vars:
+    ...
+    bastion_ips: [ "8.8.8.8/32", "8.8.4.4/32" ]
+    ansible_ssh_common_args: '-o ProxyCommand="ssh -p 22 -i ~/.ssh/bastion -W %h:%p -q user@8.8.8.8"'
+```
+
+**ansible_ssh_common_args** breakdown:
+- `-p 22`: bastion host SSH port
+- `-i ~/.ssh/bastion`: bastion host SSH key
+- `-W`: tells SSH to forward stdin and stdout
+- `%h:%p`: `%h` actual inventory host, `%p` actual inventory host SSH port
+- `-q user@8.8.8.8`: bastion username and hostname
+
+To connect to a host through a bastion using SSH's built-in `ProxyCommand`, e.g:
+1. Export env SSH_PROXY: `export SSH_PROXY='ssh -p 22 -i ~/.ssh/bastion -W %h:%p -q user@8.8.8.8'`
+2. Connect to the host using SSH: `ssh -i ~/.ssh/hetzner -o ProxyCommand="$SSH_PROXY" coreuser@8.8.4.4`
+
 
 ## `utils` CLI
 
@@ -276,5 +315,5 @@ vagrant plugin install vagrant-qemu
     ...
     ```
     Run `(sgdisk --change-name=1:"BIOS-BOOT" /dev/nvme0n1 || sgdisk --change-name=1:"BIOS-BOOT" /dev/nvme1n1) && reboot`
-5. Use `chmod 600 e2e-ssh.key && ssh -p 4449 -i e2e-ssh.key -o UserKnownHostsFile=/dev/null coreuser@127.0.0.1` to SSH into CoreOS
+5. Use `chmod 600 e2e-ssh.key && ssh -p 2222 -i e2e-ssh.key -o UserKnownHostsFile=/dev/null coreuser@127.0.0.1` to SSH into CoreOS
 6. Destroy the VM: `vagrant destroy`

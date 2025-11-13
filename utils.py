@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import ipaddress
 import json
 import os
 import re
@@ -18,8 +19,33 @@ HETZNER_API_BASE = "https://robot-ws.your-server.de"
 WAIT_TIME = 5
 
 
+def _validate_bastion_ips(bastion_ips):
+    """Validate bastion_ips list: must contain 1-3 valid IPv4 CIDR addresses."""
+    if not isinstance(bastion_ips, list):
+        raise ValueError(f"bastion_ips must be a list, got {type(bastion_ips).__name__}")
+
+    if len(bastion_ips) == 0 or len(bastion_ips) > 3:
+        if len(bastion_ips) == 0:
+            raise ValueError("bastion_ips must contain at least one IPv4 CIDR address")
+        raise ValueError(f"bastion_ips must contain at most 3 IPv4 CIDR addresses, got {len(bastion_ips)}")
+
+    for idx, ip_cidr in enumerate(bastion_ips):
+        if not isinstance(ip_cidr, str):
+            raise ValueError(f"bastion_ips[{idx}] must be a string, got {type(ip_cidr).__name__}")
+
+        if '/' not in ip_cidr:
+            raise ValueError(f"bastion_ips[{idx}] '{ip_cidr}' is missing CIDR notation (e.g., /32)")
+
+        try:
+            ipaddress.IPv4Network(ip_cidr, strict=True)
+        except ValueError as e:
+            raise ValueError(f"bastion_ips[{idx}] '{ip_cidr}' is not a valid IPv4 CIDR address: {e}") from e
+
+    return bastion_ips
+
+
 def _load_inventory(inventory_path):
-    """Load and parse inventory YAML file, returning hosts and vlan data."""
+    """Load and parse inventory YAML file, returning hosts, vlan, and bastion_ips data."""
     if not inventory_path.exists():
         raise FileNotFoundError(f"inventory file not found: {inventory_path}")
 
@@ -28,7 +54,9 @@ def _load_inventory(inventory_path):
 
     hetzner_data = data.get("hetzner_k3s_metal", {})
     hosts = hetzner_data.get("hosts", {}) or {}
-    vlan = hetzner_data.get("vars", {}).get("vlan")
+    vars_data = hetzner_data.get("vars", {})
+    vlan = vars_data.get("vlan")
+    bastion_ips = vars_data.get("bastion_ips")
 
     # Validate vlan range (4000-4091) if present
     if vlan is not None:
@@ -39,7 +67,12 @@ def _load_inventory(inventory_path):
         except (ValueError, TypeError) as e:
             raise ValueError(f"Invalid vlan {vlan}: must be a number between 4000 and 4091") from e
 
-    return hosts, vlan
+    # Validate bastion_ips (mandatory)
+    if bastion_ips is None:
+        raise ValueError("bastion_ips is required in inventory.yml under hetzner_k3s_metal.vars")
+    bastion_ips = _validate_bastion_ips(bastion_ips)
+
+    return hosts, vlan, bastion_ips
 
 
 def _safe_file_replace(file_path, new_content, backup_suffix=".tmp"):
@@ -337,7 +370,7 @@ def command_token(_):
 
 def parse_inventory_ips(inventory_path):
     """Extract all IP addresses from inventory file."""
-    hosts, _ = _load_inventory(inventory_path)
+    hosts, _, _ = _load_inventory(inventory_path)
     return [host_cfg.get("ansible_host", "").strip()
             for host_cfg in hosts.values()
             if isinstance(host_cfg, dict) and host_cfg.get("ansible_host")]
@@ -345,7 +378,7 @@ def parse_inventory_ips(inventory_path):
 
 def get_host_ip_from_inventory(inventory_path, host_name):
     """Get IP address for a specific host from inventory file."""
-    hosts, _ = _load_inventory(inventory_path)
+    hosts, _, _ = _load_inventory(inventory_path)
     if host_name not in hosts or not isinstance(hosts[host_name], dict):
         raise KeyError(f"host not found in inventory: {host_name}")
 
@@ -365,7 +398,7 @@ def _update_inventory_password(inventory_path, host_name, new_password):
         with inventory_path.open("r", encoding="utf-8") as f:
             content = f.read()
 
-        hosts, _ = _load_inventory(inventory_path)
+        hosts, _, _ = _load_inventory(inventory_path)
         if host_name not in hosts:
             print(f"Host '{host_name}' not found in inventory", file=sys.stderr)
             return False
@@ -511,7 +544,7 @@ def command_vswitch(args):
 
     inventory_path = Path.cwd() / "inventory.yml"
     server_ip = get_host_ip_from_inventory(inventory_path, args.host)
-    _, vlan = _load_inventory(inventory_path)
+    _, vlan, _ = _load_inventory(inventory_path)
 
     if vlan is None:
         print("vlan not found in inventory.yml under hetzner_k3s_metal.vars", file=sys.stderr)
@@ -550,6 +583,10 @@ def command_firewall(args):
         if not client.wait_for_firewall_ready(server_number):
             return 1
 
+    # Load inventory to get bastion_ips
+    inventory_path = Path.cwd() / "inventory.yml"
+    _, _, bastion_ips = _load_inventory(inventory_path)
+
     # Build form-urlencoded data for firewall configuration
     firewall_data = []
 
@@ -560,7 +597,21 @@ def command_firewall(args):
     firewall_data.append(("port", "main"))
 
     # Input rules
-    input_rules = [
+    input_rules = []
+
+    # Add bastion SSH rules
+    for idx, bastion_ip in enumerate(bastion_ips):
+        input_rules.append({
+            "ip_version": "ipv4",
+            "name": f"ssh bastion {idx}",
+            "dst_port": "22",
+            "src_ip": bastion_ip,
+            "protocol": "tcp",
+            "action": "accept"
+        })
+
+    # Add other input rules
+    input_rules.extend([
         {
             "ip_version": "ipv4",
             "name": "tcp established",
@@ -571,8 +622,8 @@ def command_firewall(args):
         },
         {
             "ip_version": "ipv4",
-            "name": "ssh https",
-            "dst_port": "22,443,4449",
+            "name": "https",
+            "dst_port": "443",
             "protocol": "tcp",
             "action": "accept"
         },
@@ -609,7 +660,7 @@ def command_firewall(args):
             "protocol": "udp",
             "action": "accept"
         }
-    ]
+    ])
 
     # Add input rules to form data
     for i, rule in enumerate(input_rules):
@@ -649,7 +700,7 @@ def command_set_firewall_all(args):
 def _run_command_on_all_hosts(command_func, operation_name, client, deactivate=False):
     """Helper function to run a command on all hosts in the inventory."""
     inventory_path = Path.cwd() / "inventory.yml"
-    hosts, _ = _load_inventory(inventory_path)
+    hosts, _, _ = _load_inventory(inventory_path)
 
     if not hosts:
         print("No hosts found in inventory.yml")
@@ -683,7 +734,7 @@ def command_set_vswitch_all(args):
     """Configure vswitch for all hosts in inventory using batch assignment."""
     client = args.client
     inventory_path = Path.cwd() / "inventory.yml"
-    hosts, vlan = _load_inventory(inventory_path)
+    hosts, vlan, _ = _load_inventory(inventory_path)
 
     if not hosts:
         print("No hosts found in inventory.yml")
