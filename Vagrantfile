@@ -54,7 +54,6 @@ Vagrant.configure("2") do |config|
   end
 
   # Port forwarding
-  config.vm.network "forwarded_port", guest: 4449, host: 4449
   config.vm.network "forwarded_port", guest: 443, host: 4443
 
   config.vm.provision "shell", inline: <<-SHELL

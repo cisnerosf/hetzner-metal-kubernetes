@@ -315,5 +315,5 @@ vagrant plugin install vagrant-qemu
     ...
     ```
     Run `(sgdisk --change-name=1:"BIOS-BOOT" /dev/nvme0n1 || sgdisk --change-name=1:"BIOS-BOOT" /dev/nvme1n1) && reboot`
-5. Use `chmod 600 e2e-ssh.key && ssh -p 4449 -i e2e-ssh.key -o UserKnownHostsFile=/dev/null coreuser@127.0.0.1` to SSH into CoreOS
+5. Use `chmod 600 e2e-ssh.key && ssh -p 2222 -i e2e-ssh.key -o UserKnownHostsFile=/dev/null coreuser@127.0.0.1` to SSH into CoreOS
 6. Destroy the VM: `vagrant destroy`
