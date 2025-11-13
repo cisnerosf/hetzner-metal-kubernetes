@@ -412,6 +412,11 @@
           ignore_errors: false
           tags: [install]
 
+        - name: Fix QEMU E2E test
+          ansible.builtin.command: sgdisk --change-name=1:"BIOS-BOOT" /dev/{{ nvme_devices[0] }}
+          when: e2e_test is defined and e2e_test|bool == true
+          tags: [e2e]
+
         - name: Reboot now
           shell: shutdown -r now
           async: 1
