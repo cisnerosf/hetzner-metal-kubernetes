@@ -118,6 +118,32 @@
           when: tang_url is defined and tang_url != "" and (tang_thumbprint is not defined or tang_thumbprint == "")
           run_once: true
 
+    - name: Check bastion_ips is defined, is a list, and not empty
+      fail:
+        msg: "bastion_ips is required in inventory.yml under hetzner_k3s_metal.vars, must be a list, and must not be empty"
+      when: bastion_ips is not defined or bastion_ips is not sequence or bastion_ips is string or (bastion_ips | length) == 0
+      run_once: true
+
+    - name: Validate each bastion_ips entry is a valid IPv4 CIDR address (e.g., /32)
+      shell: |
+        python3 -c "
+        import sys
+        import ipaddress
+        cidr = '{{ item }}'
+        if '/' not in cidr:
+          sys.exit(1)
+        try:
+          ipaddress.IPv4Network(cidr, strict=True)
+        except ValueError as e:
+          sys.exit(1)
+        "
+      loop: "{{ bastion_ips }}"
+      register: bastion_ip_validation
+      failed_when: bastion_ip_validation.rc != 0
+      changed_when: false
+      run_once: true
+      no_log: true
+
 
   tasks:
     - name: Preflight facts and variables
@@ -366,6 +392,8 @@
               replace: "{{ vlan }}"
             - regexp: '!!VLAND_IP!!'
               replace: "{{ vlan_ip }}"
+            - regexp: '!!BASTION_IPS!!'
+              replace: "{{ bastion_ips | join(', ') }}"
             - regexp: '!!TANG_URL!!'
               replace: "{{ tang_url }}"
             - regexp: '!!TANG_THUMBPRINT!!'

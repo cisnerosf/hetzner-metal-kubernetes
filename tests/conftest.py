@@ -39,7 +39,8 @@ def sample_inventory():
             "vars": {
                 "vlan": 4077,
                 "k3s_token": "test_token_123",
-                "first_master": "shadrach"
+                "first_master": "shadrach",
+                "bastion_ips": ["8.8.8.8/32"]
             }
         }
     }

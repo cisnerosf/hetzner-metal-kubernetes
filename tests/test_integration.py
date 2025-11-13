@@ -21,7 +21,8 @@ class TestIntegration:
                     }
                 },
                 "vars": {
-                    "vlan": 4077
+                    "vlan": 4077,
+                    "bastion_ips": ["8.8.8.8/32"]
                 }
             }
         }
@@ -79,7 +80,8 @@ class TestIntegration:
                     }
                 },
                 "vars": {
-                    "vlan": 4077
+                    "vlan": 4077,
+                    "bastion_ips": ["8.8.8.8/32"]
                 }
             }
         }
@@ -140,7 +142,8 @@ class TestIntegration:
                     }
                 },
                 "vars": {
-                    "vlan": 4077
+                    "vlan": 4077,
+                    "bastion_ips": ["8.8.8.8/32"]
                 }
             }
         }
@@ -200,7 +203,8 @@ class TestIntegration:
                     }
                 },
                 "vars": {
-                    "vlan": 4077
+                    "vlan": 4077,
+                    "bastion_ips": ["8.8.8.8/32"]
                 }
             }
         }
@@ -294,7 +298,8 @@ class TestIntegration:
                     }
                 },
                 "vars": {
-                    "vlan": 4077
+                    "vlan": 4077,
+                    "bastion_ips": ["8.8.8.8/32"]
                 }
             }
         }
@@ -333,7 +338,8 @@ class TestIntegration:
                     }
                 },
                 "vars": {
-                    "vlan": 4077
+                    "vlan": 4077,
+                    "bastion_ips": ["8.8.8.8/32"]
                 }
             }
         }

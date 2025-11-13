@@ -12,6 +12,12 @@ storage:
               elements = { 10.100.100.0/25 }
             }
 
+            set bastion_ips {
+              type ipv4_addr
+              flags interval
+              elements = { !!BASTION_IPS!! }
+            }
+
             # Runs very early in the kernel network stack, before any routing decision
             # https://github.com/k3s-io/k3s/discussions/10693
             chain prerouting {
@@ -22,7 +28,7 @@ storage:
               iifname "k3s.!!VLAN!!" ct state vmap { invalid : drop, established : accept, related : accept }
 
               # Allow SSH
-              iifname "k3s" tcp dport 4449 ct state established,new accept
+              iifname "k3s" tcp dport 22 ip saddr @bastion_ips ct state established,new accept
 
               # Allow HTTPS
               iifname "k3s" tcp dport 443 ct state established,new accept

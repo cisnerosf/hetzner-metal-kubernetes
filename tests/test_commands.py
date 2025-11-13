@@ -2,6 +2,7 @@
 
 import argparse
 from pathlib import Path
+from urllib.parse import parse_qsl
 from unittest.mock import Mock, patch
 
 from utils import (
@@ -42,7 +43,10 @@ class TestCommandClearKnownHosts:
         """Test known_hosts clearing when no IPs found."""
         inventory_data = {
             "hetzner_k3s_metal": {
-                "hosts": {}
+                "hosts": {},
+                "vars": {
+                    "bastion_ips": ["8.8.8.8/32"]
+                }
             }
         }
 
@@ -278,6 +282,9 @@ class TestCommandVswitch:
                         "ansible_host": "94.130.9.179",
                         "ansible_password": "test_password_1"
                     }
+                },
+                "vars": {
+                    "bastion_ips": ["8.8.8.8/32"]
                 }
             }
         }
@@ -341,7 +348,10 @@ class TestRunCommandOnAllHosts:
         """Test command execution when no hosts are found."""
         inventory_data = {
             "hetzner_k3s_metal": {
-                "hosts": {}
+                "hosts": {},
+                "vars": {
+                    "bastion_ips": ["8.8.8.8/32"]
+                }
             }
         }
 
@@ -577,6 +587,35 @@ class TestCommandFirewall:
 
         assert result == 1
 
+    def test_firewall_includes_bastion_rules(self, mock_robot_client, inventory_file):
+        """Test that firewall configuration includes bastion SSH rules."""
+        mock_robot_client.get_firewall.return_value = {
+            "firewall": {"status": "active"}
+        }
+        mock_robot_client.set_firewall.return_value = {"success": True}
+
+        args = argparse.Namespace(host="shadrach", client=mock_robot_client)
+
+        with patch('utils.Path.cwd', return_value=inventory_file.parent):
+            with patch('builtins.print'):
+                result = command_firewall(args)
+
+        assert result == 0
+        mock_robot_client.set_firewall.assert_called_once()
+
+        # Get the form data that was passed to set_firewall
+        call_args = mock_robot_client.set_firewall.call_args
+        form_data = call_args[0][1]  # Second argument is the form data
+
+        parsed_form_data = dict(parse_qsl(form_data))
+
+        # Verify bastion rules are included
+        assert parsed_form_data["rules[input][0][name]"] == "ssh bastion 0"
+        assert parsed_form_data["rules[input][0][src_ip]"] == "8.8.8.8/32"
+        assert parsed_form_data["rules[input][0][dst_port]"] == "22"
+        assert parsed_form_data["rules[input][0][protocol]"] == "tcp"
+        assert parsed_form_data["rules[input][0][action]"] == "accept"
+
 
 class TestCommandSetFirewallAll:
     """Test cases for command_set_firewall_all function."""
@@ -584,7 +623,7 @@ class TestCommandSetFirewallAll:
     def test_set_firewall_all_success(self, inventory_file):
         """Test successful firewall configuration on all hosts."""
         mock_client = Mock()
-        
+
         with patch('utils.Path.cwd', return_value=inventory_file.parent):
             with patch('utils._run_command_on_all_hosts', return_value=0) as mock_run_all:
                 args = argparse.Namespace(client=mock_client)
@@ -596,7 +635,7 @@ class TestCommandSetFirewallAll:
     def test_set_firewall_all_failure(self, inventory_file):
         """Test firewall configuration on all hosts with failures."""
         mock_client = Mock()
-        
+
         with patch('utils.Path.cwd', return_value=inventory_file.parent):
             with patch('utils._run_command_on_all_hosts', return_value=1) as mock_run_all:
                 args = argparse.Namespace(client=mock_client)
