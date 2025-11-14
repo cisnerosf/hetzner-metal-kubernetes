@@ -118,6 +118,12 @@
           when: tang_url is defined and tang_url != "" and (tang_thumbprint is not defined or tang_thumbprint == "")
           run_once: true
 
+        - name: Check rescue_passphrase is defined and at least 64 characters when Tang is enabled
+          fail:
+            msg: "rescue_passphrase must be defined and at least 64 characters long when tang_url is provided"
+          when: tang_url is defined and tang_url != "" and (rescue_passphrase is not defined or rescue_passphrase == "" or rescue_passphrase | length < 64)
+          run_once: true
+
     - name: Check bastion_ips is defined, is a list, and not empty
       fail:
         msg: "bastion_ips is required in inventory.yml under hetzner_k3s_metal.vars, must be a list, and must not be empty"
@@ -398,6 +404,8 @@
               replace: "{{ tang_url }}"
             - regexp: '!!TANG_THUMBPRINT!!'
               replace: "{{ tang_thumbprint }}"
+            - regexp: '!!RESCUE_PASSPHRASE!!'
+              replace: "{{ rescue_passphrase }}"
           tags: [butane]
 
         - name: Compile butane.yml file

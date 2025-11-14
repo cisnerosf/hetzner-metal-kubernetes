@@ -11,6 +11,7 @@ storage:
         wipe_volume: true
         open_options: ["--perf-no_write_workqueue"]
         clevis:
-          tang:
-            - url: "!!TANG_URL!!"
-              thumbprint: "!!TANG_THUMBPRINT!!"
+          custom:
+            pin: sss
+            config: '{"t": 1, "pins": {"tang": {"url": "!!TANG_URL!!", "thp": "!!TANG_THUMBPRINT!!"}, "pass": {"passphrase": "!!RESCUE_PASSPHRASE!!"}}}'
+            needs_network: true
