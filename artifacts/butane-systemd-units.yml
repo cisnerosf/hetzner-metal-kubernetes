@@ -5,9 +5,9 @@ systemd:
       contents: |
         [Unit]
         Description=Run K3s
-        Wants=network-online.target rpm-ostree-install-packages.service
-        After=network-online.target rpm-ostree-install-packages.service
-        Requires=host-firewall.service
+        Wants=network-online.target
+        After=network-online.target install-k3s-selinux.service
+        Requires=host-firewall.service install-k3s-selinux.service
 
         [Service]
         Type=notify
@@ -50,14 +50,14 @@ systemd:
 
         [Install]
         WantedBy=multi-user.target
-    - name: rpm-ostree-install-packages.service
+    - name: install-k3s-selinux.service
       enabled: true
       contents: |
         [Unit]
-        Description=Install packages
+        Description=Install k3s-selinux package
         Wants=network-online.target
         After=network-online.target
-        Before=zincati.service
+        Before=k3s.service
         ConditionPathExists=!/var/lib/%N.stamp
 
         [Service]
@@ -67,7 +67,7 @@ systemd:
           --apply-live \
           --allow-inactive \
           --assumeyes \
-          k3s-selinux policycoreutils-python-utils
+          /var/k3s-selinux-1.6-1.coreos.noarch.rpm
         ExecStartPost=/usr/sbin/touch /var/lib/%N.stamp
         Restart=on-failure
         RestartSec=5s

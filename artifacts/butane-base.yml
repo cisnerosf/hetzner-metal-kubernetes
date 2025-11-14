@@ -66,17 +66,6 @@ storage:
           strategy = "fleet_lock"
           [updates.fleet_lock]
           base_url = "http://10.43.254.100/"
-    - path: /etc/yum.repos.d/rancher-k3s-common.repo
-      mode: 0644
-      contents:
-        inline: |
-          [rancher-k3s-common-stable]
-          name=Rancher K3s Common (stable)
-          baseurl=https://rpm.rancher.io/k3s/stable/common/centos/9/noarch
-          enabled=1
-          gpgcheck=1
-          repo_gpgcheck=0
-          gpgkey=https://rpm.rancher.io/public.key
     - path: /etc/rancher/k3s/kubelet.config
       mode: 0644
       contents:
@@ -117,6 +106,12 @@ storage:
           X11Forwarding no
           AllowAgentForwarding no
           AllowUsers coreuser
+    - path: /var/k3s-selinux-1.6-1.coreos.noarch.rpm
+      mode: 0644
+      contents:
+        source: "https://github.com/k3s-io/k3s-selinux/releases/download/v1.6.stable.1/k3s-selinux-1.6-1.coreos.noarch.rpm"
+        verification:
+          hash: "sha256-e34a0151904d162b19a69b1e214a8c77765c9ce27c2f76cc148bd84df8c9cebc"
   links:
     - path: /usr/local/bin/kubectl
       overwrite: false
