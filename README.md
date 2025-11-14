@@ -30,6 +30,7 @@ This is an **MVP** that demonstrates the core concepts. We welcome contributions
   - [Server fails to connect to another server over VLAN IP](#server-fails-to-connect-to-another-server-over-vlan-ip)
 - [On-premises setup](#on-premises-setup)
 - [E2E tests using Vagrant](#e2e-tests-using-vagrant)
+  - [Requirements](#requirements)
   - [Install dependencies (macOS)](#install-dependencies-macos)
   - [Run](#run)
   - [Troubleshooting](#troubleshooting-1)
@@ -297,6 +298,11 @@ Canonical’s MAAS (Metal-as-a-Service) is a full-featured open-source platform 
 
 ## E2E tests using Vagrant
 
+### Requirements
+- vagrant >= 2.4.9
+- qemu >= 10.1.2
+- vagrant-qemu >= 0.3.12
+
 ### Install dependencies (macOS)
 ```bash
 brew tap hashicorp/tap
@@ -307,7 +313,7 @@ vagrant plugin install vagrant-qemu
 ### Run
 1. Start VM: `vagrant up`
 2. Run playbook: `ansible-playbook -i e2e-inventory.yml ./playbooks/k3s_metal.yml`
-3. Use `ssh -p 2222 -i e2e-ssh.key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null coreuser@127.0.0.1` to SSH into CoreOS
+3. Run `chmod 600 e2e-ssh.key && ssh -p 2222 -i e2e-ssh.key -o UserKnownHostsFile=/dev/null coreuser@127.0.0.1` to SSH into CoreOS
 4. Destroy the VM: `vagrant destroy`
 
 ### Troubleshooting
