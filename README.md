@@ -15,6 +15,9 @@ This is an **MVP** that demonstrates the core concepts. We welcome contributions
 
 
 - [Overview](#overview)
+- [Inventory Configuration](#inventory-configuration)
+  - [Host-level Variables](#host-level-variables)
+  - [Group-level Variables](#group-level-variables)
 - [Cluster setup](#cluster-setup)
 - [Single-server setup](#single-server-setup)
 - [Disk encryption](#disk-encryption)
@@ -45,12 +48,48 @@ Automates deploying K3S (single-server or HA) on Hetzner dedicated servers with 
 - **Firewall**: When using [10G uplink](https://docs.hetzner.com/robot/dedicated-server/network/10g-uplink/) (strongly recommended), the Robot firewall is not available, therefore firewall rules are also configured at the host level using nftables.
 - **Audit**: Includes basic audit rules for both K3S and Fedora CoreOS.
 - **RAID 1 (mirrored NVMe)**: Each machine should have 2 NVMe drives enabled.
-- **Cloudflare Full (strict) and AOP**: `artifacts/butane-k3s-manifests.yml` contains manifests that configures Authenticated Origin Pulls (mTLS) with Full (strict) mode for Traefik on port 443.
+- **Cloudflare Full (strict) and AOP**: `artifacts/butane-k3s-custom-resources.yml` contains manifests that configures Authenticated Origin Pulls (mTLS) with Full (strict) mode for Traefik on port 443.
 - **Fedora CoreOS**: designed for running containerized workloads securely and at scale, offering an immutable, minimal and automatically updating operating system that enhances reliability and security.
 - **Reboot Coordination**:  [fleetlock](https://github.com/poseidon/fleetlock) reboot coordinator for the nodes in the cluster.
 - **Disk Encryption**: Encrypt disks with LUKS using [Tang](https://github.com/latchset/tang)
 - **CIS Hardening**: based on [K3S CIS Hardening Guide](https://docs.k3s.io/security/hardening-guide) (partial implementation)
 - **Bastion host:** In line with the "secure by default" principle, SSH access to Ansible hosts is restricted to a defined set of IPv4 addresses.
+
+## Inventory Configuration
+
+The `inventory.yml` file defines the structure of your K3S cluster. It contains host-level variables (per server) and group-level variables (shared across all servers). Below is a comprehensive reference of all available keys and their possible values (examples may be redacted, e.g `...`).
+
+### Host-level Variables
+
+These variables are defined under `hetzner_k3s_metal.hosts.<hostname>` for each server:
+
+| Parameter | Type | Required | Description | Example |
+|-----------|------|----------|-------------|---------|
+| `ansible_host` | String (IPv4 address) | Yes | The public IP address of the dedicated Hetzner server that Ansible will connect to. | `195.202.160.120` |
+| `ansible_password` | String | Yes | SSH password for connecting to the server. This is typically the rescue password from Hetzner. The `utils.py provision` command will automatically set this to the rescue password. | `abWL4(t7U...` |
+| `ansible_user` | String | No (defaults to `root`) | SSH username for connecting to the server. | `root` |
+| `ansible_port` | Integer | No (defaults to `22`) | SSH port number for connecting to the server. | `2222` |
+| `ansible_ssh_common_args` | String | No | Additional SSH connection arguments. Can be used at the host level to override group-level settings or for E2E testing. | `'-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'` |
+| `setup` | String | Yes | Defines the role of the node in the K3S cluster. Must be either `master` or `worker`. | `master` |
+| `vlan_ip` | String (IP address) | Yes | IP address assigned to the server on the VLAN network. Must be in the range `10.100.100.1` to `10.100.100.126` (vSwitch supports up to 100 nodes). | `10.100.100.1` |
+
+### Group-level Variables
+
+These variables are defined under `hetzner_k3s_metal.vars` and apply to all hosts:
+
+| Parameter | Type | Required | Description | Example |
+|-----------|------|----------|-------------|---------|
+| `bastion_ips` | List of strings (CIDR notation) | Yes | List of allowed IPv4 networks in CIDR notation that can access the servers via SSH. Maximum of 3 entries due to Hetzner firewall limits. See [Bastion host](#bastion-host) section for more details. | `[ "8.8.4.4/32", "8.8.8.8/32" ]` |
+| `ansible_ssh_common_args` | String | No (required if using bastion host) | SSH ProxyCommand configuration for routing connections through a bastion host. See [Bastion host](#bastion-host) section for detailed explanation. | `'-o ProxyCommand="ssh -p 22 -i ~/.ssh/bastion -W %h:%p -q root@46.62.251.149"'` |
+| `tang_url` | String (URL) | No (defaults to empty string to disable encryption) | URL of the Tang server for disk encryption with LUKS. Leave as empty string `""` to disable disk encryption. Must not include a trailing slash `/`. See [Disk encryption](#disk-encryption) section for more details. | `"https://my-tang-server.mydomain.com"` or `""` |
+| `tang_thumbprint` | String | No (defaults to empty string if encryption disabled) | Thumbprint from the Tang server. Required if `tang_url` is set. Leave as empty string `""` if disk encryption is disabled. See [Disk encryption](#disk-encryption) section for more details. | `"l3fZGUCmnQF_OA..."` or `""` |
+| `vlan` | Integer | Yes | VLAN ID for the Hetzner vSwitch. Must be a number between 4000 and 4091. | `4060` |
+| `k3s_token` | String (100 characters) | Yes | 100-character alphanumeric token used for joining K3S nodes to the cluster. Generate one using `./utils.py token`. | `C31g5p0U03FbB9ZcTqXV5nwKnlDCTah6SPY...` |
+| `first_master` | String (hostname) | Yes | Hostname of the first master node in the cluster. This node will be the initial K3S server, and other nodes will join to it. | `shadrach` |
+| `ssh_authorized_key` | String (SSH public key) | Yes | SSH public key that will be added to the `authorized_keys` file on all servers for passwordless SSH access. | `"ssh-ed25519 AAAAC3Nza..."` |
+| `cf_origin_cert` | String (PEM certificate) | Yes | Cloudflare Origin Certificate in PEM format for Authenticated Origin Pulls (mTLS). This certificate is used by Traefik on port 443. See [Cluster setup](#cluster-setup) section for instructions on obtaining this certificate. | `-----BEGIN CERTIFICATE-----...` |
+| `cf_origin_cert_key` | String (PEM private key) | Yes | Private key corresponding to the Cloudflare Origin Certificate. This key is used by Traefik on port 443 for Authenticated Origin Pulls (mTLS). | `-----BEGIN PRIVATE KEY-----...` |
+| `e2e_test` | Boolean | No (for E2E testing only) | Boolean flag used for end-to-end testing with Vagrant. Set to `true` to enable E2E test mode. Not used in production deployments. | `true` |
 
 ## Cluster setup
 1. Setup [utils CLI](#utils-cli) (see section below) and install Ansible (e.g `brew install ansible`)
