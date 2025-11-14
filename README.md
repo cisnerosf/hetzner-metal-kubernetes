@@ -53,7 +53,7 @@ Automates deploying K3S (single-server or HA) on Hetzner dedicated servers with 
 - **Bastion host:** In line with the "secure by default" principle, SSH access to Ansible hosts is restricted to a defined set of IPv4 addresses.
 
 ## Cluster setup
-1. Setup `utils` CLI (see section below) and install Ansible (`brew update; brew install ansible;`)
+1. Setup [utils CLI](#utils-cli) (see section below) and install Ansible (e.g `brew install ansible`)
 2. Create the file `inventory.yml` (`vlan_ip` should be in the range `10.100.100.1 - 10.100.100.126`):
 ```yaml
 hetzner_k3s_metal:
@@ -96,7 +96,7 @@ hetzner_k3s_metal:
 ```
 3. Setup a [bastion host](#bastion-host) (see section below), then update `bastion_ips` and `ansible_ssh_common_args`.
 4. Run `./utils.py token` to generate a K3S token, then update `k3s_token`.
-5. Run `./utils.py provision_all` to provision all servers, then set each host’s `ansible_password` to its rescue password.
+5. Run `./utils.py provision_all` to provision all servers (`ansible_password` will be set to its rescue password automatically).
 6. Set `first_master` to the host name of the 1st K3S master node in the cluster.
 7. Enable [Full (strict) mode](https://developers.cloudflare.com/ssl/origin-configuration/ssl-modes/full-strict/) and [Authenticated Origin Pulls (mTLS)](https://developers.cloudflare.com/ssl/origin-configuration/authenticated-origin-pull/) for your domain on your Cloudflare and save the certifcate to `cf_origin_cert` and private key to `cf_origin_cert_key`.
 8. Run `ansible-playbook playbooks/k3s_metal.yml` and wait for the machines to reboot.
@@ -299,14 +299,16 @@ Canonical’s MAAS (Metal-as-a-Service) is a full-featured open-source platform 
 ## E2E tests using Vagrant
 
 ### Requirements
-- vagrant >= 2.4.9
+- ansible >= 12.1.0
+- python >= 3.13 (try [pyenv](https://github.com/pyenv/pyenv))
 - qemu >= 10.1.2
+- vagrant >= 2.4.9
 - vagrant-qemu >= 0.3.12
 
 ### Install dependencies (macOS)
 ```bash
 brew tap hashicorp/tap
-brew install hashicorp/tap/hashicorp-vagrant qemu socat
+brew install hashicorp/tap/hashicorp-vagrant qemu ansible
 vagrant plugin install vagrant-qemu
 ```
 
@@ -317,4 +319,5 @@ vagrant plugin install vagrant-qemu
 4. Destroy the VM: `vagrant destroy`
 
 ### Troubleshooting
-Connect to serial console: `socat - UNIX-CONNECT:$HOME/.vagrant.d/tmp/vagrant-qemu/$(cat .vagrant/machines/default/qemu/id)/qemu_socket_serial`
+1. Install socat: `brew install socat`
+2. Connect to serial console: `socat - UNIX-CONNECT:$HOME/.vagrant.d/tmp/vagrant-qemu/$(cat .vagrant/machines/default/qemu/id)/qemu_socket_serial`
