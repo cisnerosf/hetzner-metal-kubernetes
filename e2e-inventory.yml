@@ -9,6 +9,7 @@ hetzner_k3s_metal:
       setup: master
       vlan_ip: 10.100.100.1
   vars:
+    e2e_test: true
     bastion_ips: [ "0.0.0.0/0" ]
     tang_url: ""
     tang_thumbprint: ""
