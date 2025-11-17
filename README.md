@@ -32,6 +32,7 @@ This is an **MVP** that demonstrates the core concepts. We welcome contributions
   - [Cannot boot server in Rescue Mode after installing Fedora CoreOS](#cannot-boot-server-in-rescue-mode-after-installing-fedora-coreos)
   - [Server fails to connect to another server over VLAN IP](#server-fails-to-connect-to-another-server-over-vlan-ip)
   - [Tang server is unavailable](#tang-server-is-unavailable)
+  - [Bastion host is unavailable](#bastion-host-is-unavailable)
 - [On-premises setup](#on-premises-setup)
 - [E2E tests using Vagrant](#e2e-tests-using-vagrant)
   - [Requirements](#requirements)
@@ -347,6 +348,23 @@ pytest --cov=utils --cov-report=html --cov-report=term-missing
 8. Unbind it: `clevis luks unbind -d /dev/md/md-root -s 1`. This removes only the Tang binding; the passphrase stays intact.
 9. Rebind using the new Tang server URL: `clevis luks bind -d /dev/md/md-root sss '{"t":1,"pins":{"tang":[{"url":"$TANG_URL"}]}}'`
 10. Verify again with `clevis luks list -d /dev/md/md-root` the slot should now show the new Tang server. Reboot to confirm.
+
+
+### Bastion host is unavailable
+
+1. Create a new bastion host instance.
+2. Update the dedicated server's [Hetzner firewall](https://docs.hetzner.com/robot/dedicated-server/firewall/) to allow SSH connections from the new bastion host's IP address.
+3. Locate the `rescue_passphrase` you created during the initial [disk encryption](#disk-encryption) setup.
+4. Enable [Hetzner Rescue Mode](https://docs.hetzner.com/robot/dedicated-server/troubleshooting/hetzner-rescue-system/) for the machine. If the server boots using UEFI, request a [KVM console](https://docs.hetzner.com/robot/dedicated-server/maintenance/kvm-console/) and change the boot order to boot from the network card first so you can enter Rescue Mode.
+5. Inside Rescue mode, install required tools: `apt-get update && apt-get install -y mdadm cryptsetup`
+6. Assemble the RAID arrays (if not already assembled): `mdadm --assemble --scan`
+7. Unlock the root volume using your rescue passphrase: `cryptsetup luksOpen /dev/md/md-root luks-root`
+8. Mount the unlocked volume: `mount /dev/mapper/luks-root /mnt`
+9. Find the most recently ostree deployment: `ls -td /mnt/ostree/deploy/fedora-coreos/deploy/*.0 | head -1`
+10. Chroot into the deployment: `chroot $DEPLOY_ROOT /bin/bash`
+11. Copy the `nftables.conf` SELinux context: `selinuxcon=$(ls -Z /etc/nftables.conf | awk '{print $1}')`
+12. Edit the file `bastion_ips` elements: `vi /etc/nftables.conf`.
+13. Restore the SELinux context: `chcon $selinuxcon /etc/nftables.conf` and reboot.
 
 
 ## On-premises setup
