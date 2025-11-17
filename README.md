@@ -57,7 +57,7 @@ Automates deploying K3S (single-server or HA) on Hetzner dedicated servers with 
 
 ## Inventory Configuration
 
-The `inventory.yml` file defines the structure of your K3S cluster. It contains host-level variables (per server) and group-level variables (shared across all servers). Below is a comprehensive reference of all available keys and their possible values (examples may be redacted, e.g `...`).
+The `inventory.yml` file defines the structure of your K3S cluster. It contains host-level variables (per server) and group-level variables (shared across all servers). Below is a comprehensive reference of all available keys and their possible values (some examples are redacted: `...`).
 
 ### Host-level Variables
 
@@ -199,7 +199,7 @@ hetzner_k3s_metal:
   vars:
     tang_url: "https://my-tang-server.mydomain.com"
     tang_thumbprint: "l3fZGUCmnvKQF_OA6VZF9jf8z2s"
-    rescue_passphrase: aB3dE5fG7hI9jK1lM3nO5pQ7rS9tU1vW3xY5zA7bC9dE1fG3hI5jK7lM9nO1pQ3rS5tU7vW9xY1zA3bC5dE7fG9hI1jK3lM5nO7pQ9
+    rescue_passphrase: "aB3dE5fG7hI9jK1lM3nO5pQ7rS9tU1vW3xY5zA7bC9dE1fG3hI5jK7lM9pQ9..."
     vlan: 4060
     ...
 ```

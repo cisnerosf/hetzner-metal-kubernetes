@@ -104,7 +104,7 @@
       when: duplicate_ips | length > 0
       run_once: true
 
-    - name: Validate tang_url and tang_thumbprint when disk encryption is enabled
+    - name: Validate tang_url, tang_thumbprint and rescue_passphrase when disk encryption is enabled
       block:
         - name: Check tang_url is a valid URL
           fail:
@@ -124,31 +124,33 @@
           when: tang_url is defined and tang_url != "" and (rescue_passphrase is not defined or rescue_passphrase == "" or rescue_passphrase | length < 64)
           run_once: true
 
-    - name: Check bastion_ips is defined, is a list, and not empty
-      fail:
-        msg: "bastion_ips is required in inventory.yml under hetzner_k3s_metal.vars, must be a list, and must not be empty"
-      when: bastion_ips is not defined or bastion_ips is not sequence or bastion_ips is string or (bastion_ips | length) == 0
-      run_once: true
+    - name: Validate bastion_ips
+      block:
+        - name: Check bastion_ips is defined, is a list, and not empty
+          fail:
+            msg: "bastion_ips is required in inventory.yml under hetzner_k3s_metal.vars, must be a list, and must not be empty"
+          when: bastion_ips is not defined or bastion_ips is not sequence or bastion_ips is string or (bastion_ips | length) == 0
+          run_once: true
 
-    - name: Validate each bastion_ips entry is a valid IPv4 CIDR address (e.g., /32)
-      shell: |
-        python3 -c "
-        import sys
-        import ipaddress
-        cidr = '{{ item }}'
-        if '/' not in cidr:
-          sys.exit(1)
-        try:
-          ipaddress.IPv4Network(cidr, strict=True)
-        except ValueError as e:
-          sys.exit(1)
-        "
-      loop: "{{ bastion_ips }}"
-      register: bastion_ip_validation
-      failed_when: bastion_ip_validation.rc != 0
-      changed_when: false
-      run_once: true
-      no_log: true
+        - name: Validate each bastion_ips entry is a valid IPv4 CIDR address (e.g., /32)
+          shell: |
+            python3 -c "
+            import sys
+            import ipaddress
+            cidr = '{{ item }}'
+            if '/' not in cidr:
+              sys.exit(1)
+            try:
+              ipaddress.IPv4Network(cidr, strict=True)
+            except ValueError as e:
+              sys.exit(1)
+            "
+          loop: "{{ bastion_ips }}"
+          register: bastion_ip_validation
+          failed_when: bastion_ip_validation.rc != 0
+          changed_when: false
+          run_once: true
+          no_log: true
 
 
   tasks:
