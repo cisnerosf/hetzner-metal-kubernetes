@@ -13,6 +13,7 @@ hetzner_k3s_metal:
     bastion_ips: [ "0.0.0.0/0" ]
     tang_url: ""
     tang_thumbprint: ""
+    rescue_passphrase: ""
     vlan: 4060
     k3s_token: dE6OVAVnL7xdcPYae2Te6lx1uGZbzE6gO5yZsNga2zT7NBNXGjWQcEIHCPlLI2uQKai8FWfIttdY80YsygcOP3ciaCQoP4mKBLr5
     first_master: vagrant

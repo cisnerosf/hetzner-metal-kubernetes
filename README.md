@@ -31,6 +31,8 @@ This is an **MVP** that demonstrates the core concepts. We welcome contributions
 - [Troubleshooting](#troubleshooting)
   - [Cannot boot server in Rescue Mode after installing Fedora CoreOS](#cannot-boot-server-in-rescue-mode-after-installing-fedora-coreos)
   - [Server fails to connect to another server over VLAN IP](#server-fails-to-connect-to-another-server-over-vlan-ip)
+  - [Tang server is unavailable](#tang-server-is-unavailable)
+  - [Bastion host is unavailable](#bastion-host-is-unavailable)
 - [On-premises setup](#on-premises-setup)
 - [E2E tests using Vagrant](#e2e-tests-using-vagrant)
   - [Requirements](#requirements)
@@ -57,7 +59,7 @@ Automates deploying K3S (single-server or HA) on Hetzner dedicated servers with 
 
 ## Inventory Configuration
 
-The `inventory.yml` file defines the structure of your K3S cluster. It contains host-level variables (per server) and group-level variables (shared across all servers). Below is a comprehensive reference of all available keys and their possible values (examples may be redacted, e.g `...`).
+The `inventory.yml` file defines the structure of your K3S cluster. It contains host-level variables (per server) and group-level variables (shared across all servers). Below is a comprehensive reference of all available keys and their possible values (some examples are redacted: `...`).
 
 ### Host-level Variables
 
@@ -83,6 +85,7 @@ These variables are defined under `hetzner_k3s_metal.vars` and apply to all host
 | `ansible_ssh_common_args` | String | No (required if using bastion host) | SSH ProxyCommand configuration for routing connections through a bastion host. See [Bastion host](#bastion-host) section for detailed explanation. | `'-o ProxyCommand="ssh -p 22 -i ~/.ssh/bastion -W %h:%p -q root@46.62.251.149"'` |
 | `tang_url` | String (URL) | No (defaults to empty string to disable encryption) | URL of the Tang server for disk encryption with LUKS. Leave as empty string `""` to disable disk encryption. Must not include a trailing slash `/`. See [Disk encryption](#disk-encryption) section for more details. | `"https://my-tang-server.mydomain.com"` or `""` |
 | `tang_thumbprint` | String | No (defaults to empty string if encryption disabled) | Thumbprint from the Tang server. Required if `tang_url` is set. Leave as empty string `""` if disk encryption is disabled. See [Disk encryption](#disk-encryption) section for more details. | `"l3fZGUCmnQF_OA..."` or `""` |
+| `rescue_passphrase` | String (64+ characters) | No (required if `tang_url` is set) | Rescue passphrase for LUKS disk encryption. Must be at least 64 characters long. Required when `tang_url` is set. See [Disk encryption](#disk-encryption) section for more details. | `"aB3dE5fG7hI9jK1lM3nO5pQ7rS9tU1vW3..."` |
 | `vlan` | Integer | Yes | VLAN ID for the Hetzner vSwitch. Must be a number between 4000 and 4091. | `4060` |
 | `k3s_token` | String (100 characters) | Yes | 100-character alphanumeric token used for joining K3S nodes to the cluster. Generate one using `./utils.py token`. | `C31g5p0U03FbB9ZcTqXV5nwKnlDCTah6SPY...` |
 | `first_master` | String (hostname) | Yes | Hostname of the first master node in the cluster. This node will be the initial K3S server, and other nodes will join to it. | `shadrach` |
@@ -120,6 +123,7 @@ hetzner_k3s_metal:
   vars:
     tang_url: ""
     tang_thumbprint: ""
+    rescue_passphrase: ""
     vlan: 4060
     k3s_token: --REPLACE_ME--
     first_master: shadrach
@@ -160,6 +164,7 @@ hetzner_k3s_metal:
   vars:
     tang_url: ""
     tang_thumbprint: ""
+    rescue_passphrase: ""
     vlan: 4060
     k3s_token: --REPLACE_ME--
     first_master: shadrach
@@ -178,11 +183,14 @@ hetzner_k3s_metal:
 To enable disk encryption with LUKS you will need a [Tang server](https://github.com/latchset/tang) running.
 You may follow the instructions at https://github.com/cisnerosf/tang-server to set up your personal Tang server.
 
+**Attention**: Save the `rescue_passphrase` in a secure location in case you need to manually decrypt the disk.
+
 To enable encryption:
 
 1. Set `tang_url` to the address of your Tang server (no trailing slash `/`).
 2. Run `tang-show-keys 8000` inside the Tang server container and save the output to `tang_thumbprint`.
-3. Follow the same steps from **Cluster setup**.
+3. Generate a rescue passphrase that is at least 64 characters long (e.g `openssl rand -hex 32`) and then update `rescue_passphrase`.
+4. Follow the same steps from [Cluster setup](#cluster-setup).
 
 ```yaml
 hetzner_k3s_metal:
@@ -195,6 +203,7 @@ hetzner_k3s_metal:
   vars:
     tang_url: "https://my-tang-server.mydomain.com"
     tang_thumbprint: "l3fZGUCmnvKQF_OA6VZF9jf8z2s"
+    rescue_passphrase: "aB3dE5fG7hI9jK1lM3nO5pQ7rS9tU1vW3xY5zA7bC9dE1fG3hI5jK7lM9pQ9..."
     vlan: 4060
     ...
 ```
@@ -326,6 +335,45 @@ pytest --cov=utils --cov-report=html --cov-report=term-missing
    - If the problematic server is missing from the vSwitch, add it using: `./utils.py set_vswitch <hostname>`
 4. Check if the server is assigned to other vSwitches, remove it from the incorrect vSwitch(s) in the dashboard
 
+
+### Tang server is unavailable
+
+1. Follow the steps under [Disk encryption](#disk-encryption) to deploy a **new** Tang server.
+2. Locate the `rescue_passphrase` you created during the initial [disk encryption](#disk-encryption) setup.
+3. Enable [Hetzner Rescue Mode](https://docs.hetzner.com/robot/dedicated-server/troubleshooting/hetzner-rescue-system/) for the machine. If the server boots using UEFI, request a [KVM console](https://docs.hetzner.com/robot/dedicated-server/maintenance/kvm-console/) and change the boot order to boot from the network card first so you can enter Rescue Mode.
+4. Inside Rescue mode, install required tools: `apt-get update && apt-get install -y mdadm cryptsetup clevis clevis-luks`
+5. Assemble the RAID arrays (if not already assembled): `mdadm --assemble --scan`
+6. Unlock the root volume using your rescue passphrase: `cryptsetup luksOpen /dev/md/md-root luks-root`
+7. Inspect slots with `clevis luks list -d /dev/md/md-root`. You’ll see slot 1 showing `sss … tang`.
+8. Unbind it: `clevis luks unbind -d /dev/md/md-root -s 1`. This removes only the Tang binding; the passphrase stays intact.
+9. Rebind using the new Tang server URL: `clevis luks bind -d /dev/md/md-root sss '{"t":1,"pins":{"tang":[{"url":"$TANG_URL"}]}}'`
+10. Verify again with `clevis luks list -d /dev/md/md-root` the slot should now show the new Tang server. Reboot to confirm.
+
+
+### Bastion host is unavailable
+
+1. Create a new bastion host instance.
+2. Update the dedicated server's [Hetzner firewall](https://docs.hetzner.com/robot/dedicated-server/firewall/) to allow SSH connections from the new bastion host's IP address.
+3. Enable [Hetzner Rescue Mode](https://docs.hetzner.com/robot/dedicated-server/troubleshooting/hetzner-rescue-system/) for the machine. If the server boots using UEFI, request a [KVM console](https://docs.hetzner.com/robot/dedicated-server/maintenance/kvm-console/) and change the boot order to boot from the network card first so you can enter Rescue Mode.
+4. Inside Rescue mode, install required tools: `apt-get update && apt-get install -y mdadm cryptsetup`
+5. Assemble the RAID arrays (if not already assembled): `mdadm --assemble --scan`
+
+#### Encrypted disk
+6. Unlock the root volume using the `rescue_passphrase` created during [disk encryption](#disk-encryption) setup: `cryptsetup luksOpen /dev/md/md-root luks-root`
+7. Mount the unlocked volume: `mount /dev/mapper/luks-root /mnt`
+8. Find the most recently ostree deployment: `ls -td /mnt/ostree/deploy/fedora-coreos/deploy/*.0 | head -1`
+9. Chroot into the deployment folder: `chroot $DEPLOY_ROOT /bin/bash`
+10. Make a copy of nftables.conf's SELinux context: `selinuxcon=$(ls -Z /etc/nftables.conf | awk '{print $1}')`
+11. Update nftables.conf `bastion_ips` elements: `vi /etc/nftables.conf`
+12. Restore the SELinux context: `chcon $selinuxcon /etc/nftables.conf` and reboot.
+
+#### Unencrypted disk
+6. Mount the root volume: `mount /dev/md/md-root /mnt`
+7. Find the most recently ostree deployment: `ls -td /mnt/ostree/deploy/fedora-coreos/deploy/*.0 | head -1`
+8. Chroot into the deployment folder: `chroot $DEPLOY_ROOT /bin/bash`
+9. Make a copy of nftables.conf's SELinux context: `selinuxcon=$(ls -Z /etc/nftables.conf | awk '{print $1}')`
+10. Update nftables.conf `bastion_ips` elements: `vi /etc/nftables.conf`
+11. Restore the SELinux context: `chcon $selinuxcon /etc/nftables.conf` and reboot.
 
 ## On-premises setup
 

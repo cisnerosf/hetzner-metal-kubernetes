@@ -10,6 +10,8 @@ storage:
         label: luks-root
         wipe_volume: true
         open_options: ["--perf-no_write_workqueue"]
+        key_file:
+          inline: "!!RESCUE_PASSPHRASE!!"
         clevis:
           tang:
             - url: "!!TANG_URL!!"
