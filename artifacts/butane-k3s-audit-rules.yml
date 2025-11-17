@@ -21,6 +21,17 @@ storage:
             - group: "metrics.k8s.io"
               resources: ["*"]
 
+          # Exclude health check, metrics, and API discovery endpoints
+          - level: None
+            nonResourceURLs:
+              - "/metrics"
+              - "/livez"
+              - "/healthz"
+              - "/readyz"
+              - "/version"
+              - "/swagger*"
+            verbs: ["get"]
+
           # Exclude health checks and metrics scraping
           - level: None
             users: 
@@ -30,10 +41,15 @@ storage:
             - "system:kube-proxy"
             - "system:serviceaccount:kube-system:metrics-server"
             - "system:serviceaccount:kube-system:prometheus"
+            - "system:serviceaccount:cattle-monitoring-system:rancher-monitoring-prometheus"
+            - "system:serviceaccount:cattle-monitoring-system:rancher-monitoring-operator"
+            - "system:serviceaccount:cattle-monitoring-system:rancher-monitoring-grafana"
             verbs: ["get", "watch", "list"]
             resources:
             - group: ""
               resources: ["secrets", "configmaps", "serviceaccounts/token", "endpoints", "services"]
+            - group: "discovery.k8s.io"
+              resources: ["endpointslices"]
 
           # Exclude node operations for system components
           - level: None
