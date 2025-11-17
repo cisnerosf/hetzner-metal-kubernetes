@@ -354,18 +354,26 @@ pytest --cov=utils --cov-report=html --cov-report=term-missing
 
 1. Create a new bastion host instance.
 2. Update the dedicated server's [Hetzner firewall](https://docs.hetzner.com/robot/dedicated-server/firewall/) to allow SSH connections from the new bastion host's IP address.
-3. Locate the `rescue_passphrase` you created during the initial [disk encryption](#disk-encryption) setup.
-4. Enable [Hetzner Rescue Mode](https://docs.hetzner.com/robot/dedicated-server/troubleshooting/hetzner-rescue-system/) for the machine. If the server boots using UEFI, request a [KVM console](https://docs.hetzner.com/robot/dedicated-server/maintenance/kvm-console/) and change the boot order to boot from the network card first so you can enter Rescue Mode.
-5. Inside Rescue mode, install required tools: `apt-get update && apt-get install -y mdadm cryptsetup`
-6. Assemble the RAID arrays (if not already assembled): `mdadm --assemble --scan`
-7. Unlock the root volume using your rescue passphrase: `cryptsetup luksOpen /dev/md/md-root luks-root`
-8. Mount the unlocked volume: `mount /dev/mapper/luks-root /mnt`
-9. Find the most recently ostree deployment: `ls -td /mnt/ostree/deploy/fedora-coreos/deploy/*.0 | head -1`
-10. Chroot into the deployment: `chroot $DEPLOY_ROOT /bin/bash`
-11. Copy the `nftables.conf` SELinux context: `selinuxcon=$(ls -Z /etc/nftables.conf | awk '{print $1}')`
-12. Edit nftables.conf `bastion_ips` elements: `vi /etc/nftables.conf`
-13. Restore the SELinux context: `chcon $selinuxcon /etc/nftables.conf` and reboot.
+3. Enable [Hetzner Rescue Mode](https://docs.hetzner.com/robot/dedicated-server/troubleshooting/hetzner-rescue-system/) for the machine. If the server boots using UEFI, request a [KVM console](https://docs.hetzner.com/robot/dedicated-server/maintenance/kvm-console/) and change the boot order to boot from the network card first so you can enter Rescue Mode.
+4. Inside Rescue mode, install required tools: `apt-get update && apt-get install -y mdadm cryptsetup`
+5. Assemble the RAID arrays (if not already assembled): `mdadm --assemble --scan`
 
+#### Encrypted disk
+6. Unlock the root volume using the `rescue_passphrase` created during [disk encryption](#disk-encryption) setup: `cryptsetup luksOpen /dev/md/md-root luks-root`
+7. Mount the unlocked volume: `mount /dev/mapper/luks-root /mnt`
+8. Find the most recently ostree deployment: `ls -td /mnt/ostree/deploy/fedora-coreos/deploy/*.0 | head -1`
+9. Chroot into the deployment folder: `chroot $DEPLOY_ROOT /bin/bash`
+10. Make a copy of nftables.conf's SELinux context: `selinuxcon=$(ls -Z /etc/nftables.conf | awk '{print $1}')`
+11. Update nftables.conf `bastion_ips` elements: `vi /etc/nftables.conf`
+12. Restore the SELinux context: `chcon $selinuxcon /etc/nftables.conf` and reboot.
+
+#### Unencrypted disk
+6. Mount the root volume: `mount /dev/md/md-root /mnt`
+7. Find the most recently ostree deployment: `ls -td /mnt/ostree/deploy/fedora-coreos/deploy/*.0 | head -1`
+8. Chroot into the deployment folder: `chroot $DEPLOY_ROOT /bin/bash`
+9. Make a copy of nftables.conf's SELinux context: `selinuxcon=$(ls -Z /etc/nftables.conf | awk '{print $1}')`
+10. Update nftables.conf `bastion_ips` elements: `vi /etc/nftables.conf`
+11. Restore the SELinux context: `chcon $selinuxcon /etc/nftables.conf` and reboot.
 
 ## On-premises setup
 
