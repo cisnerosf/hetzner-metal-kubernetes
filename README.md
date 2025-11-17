@@ -363,7 +363,7 @@ pytest --cov=utils --cov-report=html --cov-report=term-missing
 9. Find the most recently ostree deployment: `ls -td /mnt/ostree/deploy/fedora-coreos/deploy/*.0 | head -1`
 10. Chroot into the deployment: `chroot $DEPLOY_ROOT /bin/bash`
 11. Copy the `nftables.conf` SELinux context: `selinuxcon=$(ls -Z /etc/nftables.conf | awk '{print $1}')`
-12. Edit the file `bastion_ips` elements: `vi /etc/nftables.conf`.
+12. Edit nftables.conf `bastion_ips` elements: `vi /etc/nftables.conf`
 13. Restore the SELinux context: `chcon $selinuxcon /etc/nftables.conf` and reboot.
 
 
