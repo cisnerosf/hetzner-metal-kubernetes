@@ -31,6 +31,7 @@ This is an **MVP** that demonstrates the core concepts. We welcome contributions
 - [Troubleshooting](#troubleshooting)
   - [Cannot boot server in Rescue Mode after installing Fedora CoreOS](#cannot-boot-server-in-rescue-mode-after-installing-fedora-coreos)
   - [Server fails to connect to another server over VLAN IP](#server-fails-to-connect-to-another-server-over-vlan-ip)
+  - [Tang server is unavailable](#tang-server-is-unavailable)
 - [On-premises setup](#on-premises-setup)
 - [E2E tests using Vagrant](#e2e-tests-using-vagrant)
   - [Requirements](#requirements)
@@ -181,6 +182,8 @@ hetzner_k3s_metal:
 To enable disk encryption with LUKS you will need a [Tang server](https://github.com/latchset/tang) running.
 You may follow the instructions at https://github.com/cisnerosf/tang-server to set up your personal Tang server.
 
+**Attention**: Save the `rescue_passphrase` in a secure location in case you need to manually decrypt the disk.
+
 To enable encryption:
 
 1. Set `tang_url` to the address of your Tang server (no trailing slash `/`).
@@ -330,6 +333,20 @@ pytest --cov=utils --cov-report=html --cov-report=term-missing
 3. Check the server assignments for your vSwitch:
    - If the problematic server is missing from the vSwitch, add it using: `./utils.py set_vswitch <hostname>`
 4. Check if the server is assigned to other vSwitches, remove it from the incorrect vSwitch(s) in the dashboard
+
+
+### Tang server is unavailable
+
+1. Follow the steps under [Disk encryption](#disk-encryption) to deploy a **new** Tang server.
+2. Locate the `rescue_passphrase` you created during the initial [disk encryption](#disk-encryption) setup.
+3. Enable [Hetzner Rescue Mode](https://docs.hetzner.com/robot/dedicated-server/troubleshooting/hetzner-rescue-system/) for the machine. If the server boots using UEFI, request a [KVM console](https://docs.hetzner.com/robot/dedicated-server/maintenance/kvm-console/) and change the boot order to boot from the network card first so you can enter Rescue Mode.
+4. Inside Rescue mode, install required tools: `apt-get update && apt-get install -y mdadm cryptsetup clevis clevis-luks`
+5. Assemble the RAID arrays (if not already assembled): `mdadm --assemble --scan`
+6. Unlock the root volume using your rescue passphrase: `cryptsetup luksOpen /dev/md/md-root luks-root`
+7. Inspect slots with `clevis luks list -d /dev/md/md-root`. You’ll see slot 1 showing `sss … tang`.
+8. Unbind it: `clevis luks unbind -d /dev/md/md-root -s 1`. This removes only the Tang binding; the passphrase stays intact.
+9. Rebind using the new Tang server URL: `clevis luks bind -d /dev/md/md-root sss '{"t":1,"pins":{"tang":[{"url":"$TANG_URL"}]}}'`
+10. Verify again with `clevis luks list -d /dev/md/md-root` the slot should now show the new Tang server. Reboot to confirm.
 
 
 ## On-premises setup
