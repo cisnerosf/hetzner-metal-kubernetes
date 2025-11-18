@@ -104,24 +104,86 @@
       when: duplicate_ips | length > 0
       run_once: true
 
-    - name: Validate tang_url, tang_thumbprint and rescue_passphrase when disk encryption is enabled
+    - name: Validate Tang server configuration when disk encryption is enabled
       block:
-        - name: Check tang_url is a valid URL
+        - name: Check tang_primary_url is a valid URL when provided
           fail:
-            msg: "tang_url '{{ tang_url }}' is not a valid URL"
-          when: tang_url is defined and tang_url != "" and not (tang_url | regex_search('^https?://[^/]+(?::\\d+)?$'))
+            msg: "tang_primary_url '{{ tang_primary_url }}' is not a valid URL"
+          when: >
+            tang_primary_url is defined and
+            tang_primary_url != "" and
+            not (
+              tang_primary_url | regex_search('^https?://[^/]+(?::\\d+)?$')
+            )
           run_once: true
 
-        - name: Check tang_thumbprint is defined and not empty
+        - name: Check tang_primary_thumbprint is defined and not empty when tang_primary_url is provided
           fail:
-            msg: "tang_thumbprint must be defined and not empty when tang_url is provided"
-          when: tang_url is defined and tang_url != "" and (tang_thumbprint is not defined or tang_thumbprint == "")
+            msg: "tang_primary_thumbprint must be defined and not empty when tang_primary_url is provided"
+          when: >
+            tang_primary_url is defined and
+            tang_primary_url != "" and
+            (
+              tang_primary_thumbprint is not defined or
+              tang_primary_thumbprint == ""
+            )
           run_once: true
 
         - name: Check rescue_passphrase is defined and at least 64 characters when Tang is enabled
           fail:
-            msg: "rescue_passphrase must be defined and at least 64 characters long when tang_url is provided"
-          when: tang_url is defined and tang_url != "" and (rescue_passphrase is not defined or rescue_passphrase == "" or rescue_passphrase | length < 64)
+            msg: "rescue_passphrase must be defined and at least 64 characters long when tang_primary_url is provided"
+          when: >
+            tang_primary_url is defined and
+            tang_primary_url != "" and
+            (
+              rescue_passphrase is not defined or
+              rescue_passphrase == "" or
+              rescue_passphrase | length < 64
+            )
+          run_once: true
+
+        - name: Check tang_secondary_url is not set without tang_primary_url
+          fail:
+            msg: "tang_secondary_url requires tang_primary_url to be set"
+          when: >
+            tang_secondary_url is defined and
+            tang_secondary_url != "" and
+            (
+              tang_primary_url is not defined or
+              tang_primary_url == ""
+            )
+          run_once: true
+
+        - name: Check tang_secondary_url is a valid URL when provided
+          fail:
+            msg: "tang_secondary_url '{{ tang_secondary_url }}' is not a valid URL"
+          when: >
+            tang_secondary_url is defined and
+            tang_secondary_url != "" and
+            not (
+              tang_secondary_url | regex_search('^https?://[^/]+(?::\\d+)?$')
+            )
+          run_once: true
+
+        - name: Check tang_secondary_thumbprint is defined and not empty when tang_secondary_url is provided
+          fail:
+            msg: "tang_secondary_thumbprint must be defined and not empty when tang_secondary_url is provided"
+          when: >
+            tang_secondary_url is defined and
+            tang_secondary_url != "" and
+            (
+              tang_secondary_thumbprint is not defined or
+              tang_secondary_thumbprint == ""
+            )
+          run_once: true
+
+        - name: Check Tang URLs are different when both are configured
+          fail:
+            msg: "tang_secondary_url must differ from tang_primary_url"
+          when: >
+            tang_primary_url is defined and tang_primary_url != "" and
+            tang_secondary_url is defined and tang_secondary_url != "" and
+            tang_primary_url == tang_secondary_url
           run_once: true
 
     - name: Validate bastion_ips
@@ -129,7 +191,11 @@
         - name: Check bastion_ips is defined, is a list, and not empty
           fail:
             msg: "bastion_ips is required in inventory.yml under hetzner_k3s_metal.vars, must be a list, and must not be empty"
-          when: bastion_ips is not defined or bastion_ips is not sequence or bastion_ips is string or (bastion_ips | length) == 0
+          when: >
+            bastion_ips is not defined or
+            bastion_ips is not sequence or
+            bastion_ips is string or
+            (bastion_ips | length) == 0
           run_once: true
 
         - name: Validate each bastion_ips entry is a valid IPv4 CIDR address (e.g., /32)
@@ -290,7 +356,7 @@
           file:
             path: "{{ butane_temp_dir }}/butane-luks.yml"
             state: absent
-          when: tang_url is not defined or tang_url == ""
+          when: tang_primary_url is not defined or tang_primary_url == ""
           tags: [butane]
 
         - name: Remove incompatible architecture fragment
@@ -402,10 +468,12 @@
               replace: "{{ vlan_ip }}"
             - regexp: '!!BASTION_IPS!!'
               replace: "{{ bastion_ips | join(', ') }}"
-            - regexp: '!!TANG_URL!!'
-              replace: "{{ tang_url }}"
-            - regexp: '!!TANG_THUMBPRINT!!'
-              replace: "{{ tang_thumbprint }}"
+            - regexp: '["'']?!!TANG_SERVER_DEFINITION!!["'']?'
+              replace: >-
+               [
+               { url: "{{ tang_primary_url }}", thumbprint: "{{ tang_primary_thumbprint }}" }
+               {% if tang_secondary_url | default('') != "" %}, { url: "{{ tang_secondary_url }}", thumbprint: "{{ tang_secondary_thumbprint }}" }{% endif %} 
+               ]
             - regexp: '!!RESCUE_PASSPHRASE!!'
               replace: "{{ rescue_passphrase }}"
           tags: [butane]

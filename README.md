@@ -21,6 +21,7 @@ This is an **MVP** that demonstrates the core concepts. We welcome contributions
 - [Cluster setup](#cluster-setup)
 - [Single-server setup](#single-server-setup)
 - [Disk encryption](#disk-encryption)
+  - [Tang servers HA setup](#tang-servers-ha-setup)
 - [Bastion host](#bastion-host)
 - [utils CLI](#utils-cli)
   - [Setup](#setup)
@@ -83,11 +84,13 @@ These variables are defined under `hetzner_k3s_metal.vars` and apply to all host
 |-----------|------|----------|-------------|---------|
 | `bastion_ips` | List of strings (CIDR notation) | Yes | List of allowed IPv4 networks in CIDR notation that can access the servers via SSH. Maximum of 3 entries due to Hetzner firewall limits. See [Bastion host](#bastion-host) section for more details. | `[ "8.8.4.4/32", "8.8.8.8/32" ]` |
 | `ansible_ssh_common_args` | String | No (required if using bastion host) | SSH ProxyCommand configuration for routing connections through a bastion host. See [Bastion host](#bastion-host) section for detailed explanation. | `'-o ProxyCommand="ssh -p 22 -i ~/.ssh/bastion -W %h:%p -q root@46.62.251.149"'` |
-| `tang_url` | String (URL) | No (defaults to empty string to disable encryption) | URL of the Tang server for disk encryption with LUKS. Leave as empty string `""` to disable disk encryption. Must not include a trailing slash `/`. See [Disk encryption](#disk-encryption) section for more details. | `"https://my-tang-server.mydomain.com"` or `""` |
-| `tang_thumbprint` | String | No (defaults to empty string if encryption disabled) | Thumbprint from the Tang server. Required if `tang_url` is set. Leave as empty string `""` if disk encryption is disabled. See [Disk encryption](#disk-encryption) section for more details. | `"l3fZGUCmnQF_OA..."` or `""` |
-| `rescue_passphrase` | String (64+ characters) | No (required if `tang_url` is set) | Rescue passphrase for LUKS disk encryption. Must be at least 64 characters long. Required when `tang_url` is set. See [Disk encryption](#disk-encryption) section for more details. | `"aB3dE5fG7hI9jK1lM3nO5pQ7rS9tU1vW3..."` |
+| `tang_primary_url` | String (URL) | No (defaults to empty string to disable encryption) | Primary Tang server URL for LUKS disk encryption. Leave as empty string `""` to disable disk encryption. Must not include a trailing slash `/`. See [Disk encryption](#disk-encryption) for details. | `"https://tang-1.example.com"` or `""` |
+| `tang_primary_thumbprint` | String | No (defaults to empty string if encryption disabled) | Thumbprint for the primary Tang server. Required whenever `tang_primary_url` is set. | `"l3fZGUCmnQF_OA..."` |
+| `tang_secondary_url` | String (URL) | No | Optional second Tang server URL for high availability. Leave as empty string `""` if not used. Must follow the same formatting rules as `tang_primary_url`. | `"https://tang-2.example.com"` or `""` |
+| `tang_secondary_thumbprint` | String | No | Thumbprint for the secondary Tang server. Required when `tang_secondary_url` is set. | `"b7dMGUCmnQF_OA..."` or `""` |
+| `rescue_passphrase` | String (64+ characters) | No (required if `tang_primary_url` is set) | Rescue passphrase for LUKS disk encryption. Must be at least 64 characters long. Required whenever disk encryption is enabled. | `"aB3dE5fG7hI9jK1lM3nO5pQ..."` |
 | `vlan` | Integer | Yes | VLAN ID for the Hetzner vSwitch. Must be a number between 4000 and 4091. | `4060` |
-| `k3s_token` | String (100 characters) | Yes | 100-character alphanumeric token used for joining K3S nodes to the cluster. Generate one using `./utils.py token`. | `C31g5p0U03FbB9ZcTqXV5nwKnlDCTah6SPY...` |
+| `k3s_token` | String (100 characters) | Yes | 100-character alphanumeric token used for joining K3S nodes to the cluster. Generate one using `./utils.py token`. | `C31g5p0U03FbB9ZcTqXV5nw...` |
 | `first_master` | String (hostname) | Yes | Hostname of the first master node in the cluster. This node will be the initial K3S server, and other nodes will join to it. | `shadrach` |
 | `ssh_authorized_key` | String (SSH public key) | Yes | SSH public key that will be added to the `authorized_keys` file on all servers for passwordless SSH access. | `"ssh-ed25519 AAAAC3Nza..."` |
 | `cf_origin_cert` | String (PEM certificate) | Yes | Cloudflare Origin Certificate in PEM format for Authenticated Origin Pulls (mTLS). This certificate is used by Traefik on port 443. See [Cluster setup](#cluster-setup) section for instructions on obtaining this certificate. | `-----BEGIN CERTIFICATE-----...` |
@@ -121,8 +124,10 @@ hetzner_k3s_metal:
       setup: worker
       vlan_ip: 10.100.100.4
   vars:
-    tang_url: ""
-    tang_thumbprint: ""
+    tang_primary_url: ""
+    tang_primary_thumbprint: ""
+    tang_secondary_url: ""
+    tang_secondary_thumbprint: ""
     rescue_passphrase: ""
     vlan: 4060
     k3s_token: --REPLACE_ME--
@@ -162,8 +167,10 @@ hetzner_k3s_metal:
       setup: master
       vlan_ip: 10.100.100.1
   vars:
-    tang_url: ""
-    tang_thumbprint: ""
+    tang_primary_url: ""
+    tang_primary_thumbprint: ""
+    tang_secondary_url: ""
+    tang_secondary_thumbprint: ""
     rescue_passphrase: ""
     vlan: 4060
     k3s_token: --REPLACE_ME--
@@ -187,10 +194,16 @@ You may follow the instructions at https://github.com/cisnerosf/tang-server to s
 
 To enable encryption:
 
-1. Set `tang_url` to the address of your Tang server (no trailing slash `/`).
-2. Run `tang-show-keys 8000` inside the Tang server container and save the output to `tang_thumbprint`.
+1. Set `tang_primary_url` to the address of your primary Tang server (no trailing slash `/`).
+2. Run `tang-show-keys 8000` inside the Tang server container and copy the thumbprint into `tang_primary_thumbprint`.
 3. Generate a rescue passphrase that is at least 64 characters long (e.g `openssl rand -hex 32`) and then update `rescue_passphrase`.
 4. Follow the same steps from [Cluster setup](#cluster-setup).
+
+### Tang servers HA setup
+
+Fedora CoreOS uses Clevis [sss pin](https://github.com/latchset/clevis#pin-shamir-secret-sharing) (Shamir Secret Sharing) when multiple Tang servers are defined. With the threshold set to `t:1`, the disk can be unlocked by **any one** Tang server.
+
+Configure a secondary Tang server as a backup to ensure high availability and prevent downtime if the primary server fails, allowing disk decryption with just one reachable server:
 
 ```yaml
 hetzner_k3s_metal:
@@ -201,8 +214,10 @@ hetzner_k3s_metal:
       setup: master
       vlan_ip: 10.100.100.1
   vars:
-    tang_url: "https://my-tang-server.mydomain.com"
-    tang_thumbprint: "l3fZGUCmnvKQF_OA6VZF9jf8z2s"
+    tang_primary_url: "https://tang-1.mydomain.com"
+    tang_primary_thumbprint: "l3fZGUCmnvKQF_OA6VZF9jf8z2s"
+    tang_secondary_url: "https://tang-2.mydomain.com"
+    tang_secondary_thumbprint: "m4sRGUCmnvKQF_OA6VZF9jf8z2s"
     rescue_passphrase: "aB3dE5fG7hI9jK1lM3nO5pQ7rS9tU1vW3xY5zA7bC9dE1fG3hI5jK7lM9pQ9..."
     vlan: 4060
     ...
