@@ -195,7 +195,7 @@ You may follow the instructions at https://github.com/cisnerosf/tang-server to s
 To enable encryption:
 
 1. Set `tang_primary_url` to the address of your primary Tang server (no trailing slash `/`).
-2. Run `tang-show-keys 8000` inside each Tang server container and copy the thumbprints into `tang_primary_thumbprint`.
+2. Run `tang-show-keys 8000` inside the Tang server container and copy the thumbprint into `tang_primary_thumbprint`.
 3. Generate a rescue passphrase that is at least 64 characters long (e.g `openssl rand -hex 32`) and then update `rescue_passphrase`.
 4. Follow the same steps from [Cluster setup](#cluster-setup).
 
