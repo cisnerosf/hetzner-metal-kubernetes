@@ -1,8 +1,6 @@
 boot_device:
   luks:
-    tang:
-      - url: "!!TANG_URL!!"
-        thumbprint: "!!TANG_THUMBPRINT!!"
+    tang: "!!TANG_SERVER_DEFINITION!!"
 storage:
     luks:
       - name: root
@@ -13,6 +11,4 @@ storage:
         key_file:
           inline: "!!RESCUE_PASSPHRASE!!"
         clevis:
-          tang:
-            - url: "!!TANG_URL!!"
-              thumbprint: "!!TANG_THUMBPRINT!!"
+          tang: "!!TANG_SERVER_DEFINITION!!"
