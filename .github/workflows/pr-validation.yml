@@ -95,9 +95,10 @@ jobs:
         sed -i 's/!!MAC_ADDRESS!!/aa:bb:cc:dd:ee:ff/g' /tmp/merged_butane.yml
         sed -i 's/!!VLAN!!/100/g' /tmp/merged_butane.yml
         sed -i 's/!!VLAND_IP!!/10.100.100.10/g' /tmp/merged_butane.yml
+        sed -i 's/!!BASTION_IPS!!/0.0.0.0\/0/g' /tmp/merged_butane.yml
         sed -i 's/!!K3S_TOKEN!!/NE0xJtNb2kVPFbnZVMp6gEUqO79jwlx8DlmgWJxc7hSkkS6SddtmEPY6u7qdIHAsU1mbcI1hWj7oaBrVgifHaNRgCpUiNfU03CFQ/g' /tmp/merged_butane.yml
-        sed -i 's/!!TANG_URL!!/https:\/\/tang.example.com/g' /tmp/merged_butane.yml
-        sed -i 's/!!TANG_THUMBPRINT!!/example-thumbprint-12345/g' /tmp/merged_butane.yml
+        sed -i "s/[\"']\{0,1\}!!TANG_SERVER_DEFINITION!![\"']\{0,1\}/[{\"url\":\"https:\/\/tang.example.com\",\"thumbprint\":\"example-thumbprint-12345\"}]/g" /tmp/merged_butane.yml
+        sed -i 's/!!RESCUE_PASSPHRASE!!/RescuePassphraseForValidation123!/g' /tmp/merged_butane.yml
         echo "Placeholders replaced successfully"
 
     - name: Validate merged butane file
